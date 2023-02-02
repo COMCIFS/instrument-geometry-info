@@ -70,7 +70,7 @@ class CommandLineParser():
                 self._create_options_regex('goniometer_rot_direction'), # no effect
             'frame_numbers': r'^\d+(,\s*\d+)*$',
             'external_url': None,
-            'temperature': r'\d+\Z',
+            'temperature': r'[+-]{0,1}\d+\Z',
         }
 
 
