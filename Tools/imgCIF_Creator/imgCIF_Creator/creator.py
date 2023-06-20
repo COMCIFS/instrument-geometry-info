@@ -41,12 +41,17 @@ def validate_filename(filename):
             # check only top level dir
             break
     elif os.path.isfile(filename):
-        regex = r'.*((?P<h5>\.h5)\Z)'
-        match = re.match(regex, filename)
-        filetype = 'h5'
-        if not match:
-            print('Only h5 (NxMx) files are supported! If you want to convert \
-cbf and smv files please provide a directory. Exiting.')
+        filetype = None
+        supported_filetypes = ['h5', 'expt']
+        regexs = [r'.*((?P<h5>\.h5)\Z)', r'.*((?P<expt>\.expt)\Z)']
+        for i, regex in enumerate(regexs):
+            match = re.match(regex, filename)
+            if match is not None:
+                filetype = supported_filetypes[i]
+                break
+        if not filetype:
+            print('Only h5 (NxMx) and expt (DIALS) files are supported! \
+If you want to convert cbf and smv files please provide a directory. Exiting.')
             sys.exit()
     else:
         print(f'{filename} is neither a valid directory nor filename!')
