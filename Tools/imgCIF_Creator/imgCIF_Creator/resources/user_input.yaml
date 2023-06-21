@@ -59,7 +59,7 @@ rad_type:
     label: Radiation type
     required: false
     description: >
-      Please enter the type of the radaition, e.g. 'Synchrotron X-ray Source'.
+      Please enter the type of the radiation, e.g. 'Synchrotron X-ray Source'.
 
 wavelength:
     label: Wavelength

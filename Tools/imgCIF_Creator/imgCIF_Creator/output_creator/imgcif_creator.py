@@ -44,6 +44,9 @@ class ImgCIFCreator:
         elif filetype == 'h5':
             extractor_module = importlib.import_module(
                 'imgCIF_Creator.information_extractors.hdf5_nxmx')
+        elif filetype == 'expt':
+            extractor_module = importlib.import_module(
+                'imgCIF_Creator.information_extractors.dials_expt')
 
         self.extractor = extractor_module.Extractor(filename, stem)
         self.cmd_parser = parser.CommandLineParser()

@@ -134,10 +134,10 @@ def main(filename, stem, output_file):
 information to create an imgCIF file out of HDF5, full CBF and some common subset
 of miniCBF.
 
-    Args:
-        filename (str): The filename or directory.
-        stem (str): Constant portion of frame file name.
-        output_file (str): Output file to write to.
+Arguments:\n
+    filename (str): A file name or directory.\n
+    stem (str): Constant portion of the file names in case of multiple frames.\n
+    output_file (str): Output file to write to.
     """
 
     print('\n--------------------------- imgCIF Creator ---------------------------\n')
