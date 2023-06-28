@@ -50,3 +50,47 @@ def prune_scan_info(scan_info, prune_always_axes=False):
         del scan_info[scan][0][axis]
 
     return scan_info
+
+
+def gen_dict_extract(query_key, input_dict):
+    """Recursive function to retrieve values of all keys matching a query
+       in a nested dictionary with possible lists of sub-dictionaries.
+       From: https://stackoverflow.com/questions/9807634/
+       find-all-occurrences-of-a-key-in-nested-dictionaries-and-lists
+    """
+    if hasattr(input_dict,'items'):
+        for _key, _item in input_dict.items():
+            if _key == query_key:
+                yield _item
+            if isinstance(_item, dict):
+                for result in gen_dict_extract(query_key, _item):
+                    yield result
+            elif isinstance(_item, list):
+                for _sub_dict in _item:
+                    for result in gen_dict_extract(query_key, _sub_dict):
+                        yield result
+
+
+def name_contained(input_dict, query_key, known_options):
+    """Check strings at all matching keys in a given input metadata dictionary
+    against corresponding options from known values (names) of that info type.
+    Example: presence of a valid facility name in the DIALS dictionary, in the
+    string value belonging to key 'identifier'
+
+    Args:
+        input_dict (dict): a dictionary containing all available input metadata
+        query_key (string): a key known to possibly contain the sought info
+        known_options (list): a list of strings representing valid names
+
+    Returns:
+        option (string): the matching option for the sought info type 
+    """
+
+    info_list = list(gen_dict_extract(query_key, input_dict))
+
+    for item in info_list:
+        for option in known_options:
+            if option in item:
+                return option
+
+    return None
