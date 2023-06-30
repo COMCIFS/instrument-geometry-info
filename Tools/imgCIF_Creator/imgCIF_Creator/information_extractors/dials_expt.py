@@ -30,11 +30,30 @@ class Extractor(extractor_interface.ExtractorInterface):
 
         Args:
             filename (str): name of the expt file containing information in JSON to
-                be extracted
+                be extracted.
         """
 
         self._raw_dict = self._ingest_json(filename)
-        print(self._raw_dict, '\n\n')
+        #print(self._raw_dict, '\n\n')
+
+        assert(len(self._raw_dict['scan']) == len(self._raw_dict['goniometer']))
+
+        _unique_scans = {}
+        _scanax_gonio = {}
+        _wavelength = {}
+        _pixel_size = {}
+        for id, scan_info in enumerate(self._raw_dict['scan']):
+            _unique_scans[f'{id+1:02d}'] = scan_info
+            _scanax_gonio[f'{id+1:02d}'] = self._raw_dict['goniometer'][id]
+            _wavelength[f'{id+1:02d}'] = self._raw_dict['beam'][id]['wavelength']
+            _pixel_size[f'{id+1:02d}'] = \
+                self._raw_dict['detector'][id]['panels'][0]['pixel_size']
+
+        print(f'{len(_unique_scans.keys())} scan(s) found')
+
+        self.get_scan_settings_info(_unique_scans, _scanax_gonio, _wavelength,
+                                    _pixel_size)
+
         self._resources_path = os.path.abspath(getsourcefile(lambda: 0)).replace(
             'information_extractors/dials_expt.py', 'resources/')
 
@@ -44,6 +63,55 @@ class Extractor(extractor_interface.ExtractorInterface):
                 self._facility_options = input_options['facility']['options']
             except yaml.YAMLError as error:
                 print(error)
+
+    def get_scan_settings_info(self, _scan_frame_info, _scan_gonio_axes,
+                               _wavelength, _pixel_size):
+        """Assemble information about the scans, this is a dictionary containing
+        the starting point settings of the axes and the details of each scan.
+
+        For example for scan '08':
+        {'08': ({'chi': -60.991, 'phi': 110.0, 'detector_2theta': -12.4,
+        'omega': -18.679, 'distance': 40.0}, {'frames': 12, 'axis': 'omega',
+        'incr': 2.0, 'time': 1800.0, 'start': -40.679, 'range': 24.0,
+        'wavelength': 0.560834, 'x_pixel_size': 0.172, 'y_pixel_size': 0.172,
+        'mini_header': ['# detector: pilatus100k',.... ],
+        ...}
+
+        Args:
+            _scan_frame_info: dictionary holding (N scan) sub-dictionaries
+                              with frame info
+            _scan_gonio_axes: dictionary holding (N scan) sub-dictionaries
+                              with goniometer axes settings
+        """
+
+        scan_info = {}
+
+        for scan in _scan_frame_info.keys():
+            img_num_range = _scan_frame_info[scan]['image_range']
+            n_frames = img_num_range[1] - img_num_range[0] + 1
+            scan_ax_index = _scan_gonio_axes[scan]['scan_axis']
+            scan_ax_name = \
+            _scan_gonio_axes[scan]['names'][scan_ax_index].split('_')[1].lower()
+            scan_ax_start = _scan_gonio_axes[scan]['angles'][scan_ax_index]
+            osc_range = _scan_frame_info[scan]['oscillation']
+            scan_incr = osc_range[1] - osc_range[0]
+            """ DIALS produces individual exposure times for every frame;
+            we assume this is constant and take the first as global value"""
+            exposure = _scan_frame_info[scan]['exposure_time'][0]
+
+            scan_details = {"frames" : n_frames,
+                            "axis" : scan_ax_name,
+                            "incr" : scan_incr,
+                            "time" : exposure,
+                            "start" : scan_ax_start,
+                            # because of 0.1*137 = 13.700000000000001 we round
+                            "range" : round(scan_incr * n_frames, 10),
+                            "wavelength" : _wavelength[scan],
+                            "x_pixel_size" : _pixel_size[scan][0],
+                            "y_pixel_size" : _pixel_size[scan][1],
+                            "mini_header" : 'none'  # to be clarified
+                            }
+            scan_info[scan] = (axes_settings, scan_details)
 
 
     def get_source_info(self):
@@ -105,24 +173,6 @@ class Extractor(extractor_interface.ExtractorInterface):
 
         Returns:
            dict: a dictionary containing the information about the radiation
-        """
-
-        pass
-
-    def get_scan_settings_info(self):
-        """Return the information about the scans, this is a dictionary containing
-        the starting point settings of the axes and the details of each scan.
-
-        For example for scan '08':
-        {'08': ({'chi': -60.991, 'phi': 110.0, 'detector_2theta': -12.4,
-        'omega': -18.679, 'distance': 40.0}, {'frames': 12, 'axis': 'omega',
-        'incr': 2.0, 'time': 1800.0, 'start': -40.679, 'range': 24.0,
-        'wavelength': 0.560834, 'x_pixel_size': 0.172, 'y_pixel_size': 0.172,
-        'mini_header': ['# detector: pilatus100k',.... ],
-        ...}
-
-        Returns:
-            dict: a dictionary containing the information about the scans
         """
 
         pass
