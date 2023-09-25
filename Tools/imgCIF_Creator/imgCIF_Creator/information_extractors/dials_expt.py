@@ -41,18 +41,21 @@ class Extractor(extractor_interface.ExtractorInterface):
         _unique_scans = {}
         _scanax_gonio = {}
         _wavelength = {}
+        _det_origin = {}
         _pixel_size = {}
         for id, scan_info in enumerate(self._raw_dict['scan']):
             _unique_scans[f'{id+1:02d}'] = scan_info
             _scanax_gonio[f'{id+1:02d}'] = self._raw_dict['goniometer'][id]
             _wavelength[f'{id+1:02d}'] = self._raw_dict['beam'][id]['wavelength']
+            _det_origin[f'{id+1:02d}'] = \
+                self._raw_dict['detector'][id]['panels'][0]['origin']
             _pixel_size[f'{id+1:02d}'] = \
                 self._raw_dict['detector'][id]['panels'][0]['pixel_size']
 
         print(f'{len(_unique_scans.keys())} scan(s) found')
 
         self.get_scan_settings_info(_unique_scans, _scanax_gonio, _wavelength,
-                                    _pixel_size)
+                                    _det_origin, _pixel_size)
 
         self._resources_path = os.path.abspath(getsourcefile(lambda: 0)).replace(
             'information_extractors/dials_expt.py', 'resources/')
@@ -64,24 +67,35 @@ class Extractor(extractor_interface.ExtractorInterface):
             except yaml.YAMLError as error:
                 print(error)
 
+    def get_axes_position_dict(self, expt_gonio_axes, n_frames, scan_incr):
+        """Re-arrange the multi-axis dictionary of the expt input w features as
+        keys) to a dictionary of {name: angle} type with axes names as keys,
+        for those names found - no 2theta (!), kappa 
+        """
+        axes_settings = {}
+        _index = int(expt_gonio_axes['scan_axis'])
+        _axes_names  = [name.split('_')[-1].lower() for name in expt_gonio_axes['names']]
+        _axes_angles = expt_gonio_axes['angles']
+        _axes_angles[_index] += round((n_frames - 1) * scan_incr, 10)
+        for i, name in enumerate(_axes_names):
+            axes_settings[name] = _axes_angles[i]
+        return axes_settings
+
     def get_scan_settings_info(self, _scan_frame_info, _scan_gonio_axes,
-                               _wavelength, _pixel_size):
+                               _wavelength, _det_origin, _pixel_size):
         """Assemble information about the scans, this is a dictionary containing
         the starting point settings of the axes and the details of each scan.
-
-        For example for scan '08':
-        {'08': ({'chi': -60.991, 'phi': 110.0, 'detector_2theta': -12.4,
-        'omega': -18.679, 'distance': 40.0}, {'frames': 12, 'axis': 'omega',
-        'incr': 2.0, 'time': 1800.0, 'start': -40.679, 'range': 24.0,
-        'wavelength': 0.560834, 'x_pixel_size': 0.172, 'y_pixel_size': 0.172,
-        'mini_header': ['# detector: pilatus100k',.... ],
-        ...}
 
         Args:
             _scan_frame_info: dictionary holding (N scan) sub-dictionaries
                               with frame info
             _scan_gonio_axes: dictionary holding (N scan) sub-dictionaries
                               with goniometer axes settings
+            _wavelength: photon wavelength as in 'beam' sub-dict of the input
+            _det_origin: detector origin relative to the interaction point
+                         (adding detector distance and beam center), as in
+                         'detector/panel' sub-dict of the input
+            _pixel_size: detector pixel size as in 'detector/panel' sub-dict
         """
 
         scan_info = {}
@@ -111,6 +125,14 @@ class Extractor(extractor_interface.ExtractorInterface):
                             "y_pixel_size" : _pixel_size[scan][1],
                             "mini_header" : 'none'  # to be clarified
                             }
+            axes_settings = self.get_axes_position_dict(_scan_gonio_axes[scan], n_frames, scan_incr)
+            axes_settings['distance'] = _det_origin[scan][2]
+            # DEBUG START
+            #print('# DEBUG INFO # ')
+            #print(axes_settings)
+            #print(scan_details)
+            # DEBUG END
+
             scan_info[scan] = (axes_settings, scan_details)
 
 
