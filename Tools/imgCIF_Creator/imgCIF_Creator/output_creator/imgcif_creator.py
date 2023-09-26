@@ -80,6 +80,7 @@ class ImgCIFCreator:
         array_info = self.check_array_completeness(array_info)
 
         scan_setting_info = self.extractor.get_scan_settings_info()
+        #print(scan_setting_info)
         # this is not checking anything right now
         scan_setting_info = self.check_scan_settings_completeness(scan_setting_info)
         # if always axes do not change and are at their home positions we want to
@@ -141,6 +142,8 @@ class ImgCIFCreator:
             dict: the information completed
         """
 
+        print('# Entering misc completeness checker')
+
         if self.param_is_none(misc_info['doi']):
             misc_info['doi'] = self.cmd_parser.request_input('doi')
 
@@ -159,6 +162,8 @@ class ImgCIFCreator:
         Returns:
             dict: the information completed
         """
+
+        print('# Entering source completeness checker')
 
         layout = ''
         if not any(source_info.values()):
@@ -278,6 +283,9 @@ class ImgCIFCreator:
         """
 
         # does not include multiple detectors (yet?)
+
+        print('# Entering detector completeness checker')
+
         if self.param_is_none(detector_info["detector_id"]):
             detector_info["detector_id"] = ['det1']
 
