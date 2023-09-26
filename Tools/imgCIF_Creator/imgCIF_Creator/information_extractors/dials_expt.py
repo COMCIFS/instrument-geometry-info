@@ -54,7 +54,7 @@ class Extractor(extractor_interface.ExtractorInterface):
 
         print(f'{len(_unique_scans.keys())} scan(s) found')
 
-        self.get_scan_settings_info(_unique_scans, _scanax_gonio, _wavelength,
+        self._scan_info_expt(_unique_scans, _scanax_gonio, _wavelength,
                                     _det_origin, _pixel_size)
 
         self._resources_path = os.path.abspath(getsourcefile(lambda: 0)).replace(
@@ -67,8 +67,19 @@ class Extractor(extractor_interface.ExtractorInterface):
             except yaml.YAMLError as error:
                 print(error)
 
+    def get_scan_settings_info(self):
+        """Return pre-collected data from the self._scan_info_expt() helper
+        function.
+        NOTE: in the cbf_smv template, a prune function was applied, and
+        frame-type info returned as well.
+        """
+        print('# Entering scan-settings info getter')
+
+        return self.scan_info
+        
+
     def get_axes_position_dict(self, expt_gonio_axes, n_frames, scan_incr):
-        """Re-arrange the multi-axis dictionary of the expt input w features as
+        """Re-arrange the multi-axis dictionary of the expt input (features as
         keys) to a dictionary of {name: angle} type with axes names as keys,
         for those names found - no 2theta (!), kappa 
         """
@@ -81,7 +92,7 @@ class Extractor(extractor_interface.ExtractorInterface):
             axes_settings[name] = _axes_angles[i]
         return axes_settings
 
-    def get_scan_settings_info(self, _scan_frame_info, _scan_gonio_axes,
+    def _scan_info_expt(self, _scan_frame_info, _scan_gonio_axes,
                                _wavelength, _det_origin, _pixel_size):
         """Assemble information about the scans, this is a dictionary containing
         the starting point settings of the axes and the details of each scan.
@@ -98,7 +109,7 @@ class Extractor(extractor_interface.ExtractorInterface):
             _pixel_size: detector pixel size as in 'detector/panel' sub-dict
         """
 
-        scan_info = {}
+        self.scan_info = {}
 
         for scan in _scan_frame_info.keys():
             img_num_range = _scan_frame_info[scan]['image_range']
@@ -133,7 +144,7 @@ class Extractor(extractor_interface.ExtractorInterface):
             #print(scan_details)
             # DEBUG END
 
-            scan_info[scan] = (axes_settings, scan_details)
+            self.scan_info[scan] = (axes_settings, scan_details)
 
 
     def get_source_info(self):
@@ -143,6 +154,8 @@ class Extractor(extractor_interface.ExtractorInterface):
         Returns:
             dict: a dictionary containing the information about the source
         """
+
+        print('# Entering source info getter')
 
         facility = extractor_utils.name_contained(self._raw_dict, 'identifier',
                                                   self._facility_options)
@@ -158,6 +171,39 @@ class Extractor(extractor_interface.ExtractorInterface):
                        'location' : location}
 
         return source_info
+    
+
+    def _stack_gonio_axes_from_scans(self):
+        """Return a value for the dictionary 'gonio_axes_found', which is
+           a tuple of lists: ([gonio_scan_axes], [rotation_senses])
+        """
+        _ax_names = []
+        _ax_sense = []
+        for scan in self.scan_info.keys():
+            # tuple element [1] is the 'scan_details' dictionary
+            _ax_names.append(self.scan_info[scan][1]['axis'])
+            _ax_sense.append('c')
+        return (_ax_names, _ax_sense)
+
+    def _stack_detrot_axes_from_scans(self):
+        """Return a value for the dictionary 'det_rot_axes_found', which is
+           a tuple of lists: ([rotation_axes], [rotation_senses])
+           ! This is setting constant fill values, because 'Detector_2theta'
+           ! from the mini-CBF header is not taken over into .expt
+        """
+        _n  = len(self.scan_info)
+        return (['detector_2theta' for _ in range(_n)], ['c' for _ in range(_n)])
+    
+
+    def _stack_det_trans_from_scans(self):
+        """Return a value for the dictionary 'det_trans_axes_found', which is
+           a simple list: [tranlation_axes]
+        """
+        _distances = []
+        for scan in self.scan_info.keys():
+            # tuple element [0] is the 'axes_settings' dictionary
+            _distances.append(self.scan_info[scan][0]['distance'])
+        return _distances
 
 
     def get_axes_info(self):
@@ -167,7 +213,20 @@ class Extractor(extractor_interface.ExtractorInterface):
             dict: a dictionary containing the information about the axes settings
         """
 
-        pass
+        print('# Entering axes info getter')
+
+        gonio_axes = self._stack_gonio_axes_from_scans()
+        det_rot_axes = self._stack_detrot_axes_from_scans()
+        det_trans = self._stack_det_trans_from_scans()
+
+        axes_info = {'axes' : None}
+        axes_info['gonio_axes_found'] = gonio_axes
+        axes_info['det_rot_axes_found'] = det_rot_axes
+        axes_info['det_trans_axes_found'] = det_trans
+
+        print(axes_info)
+        return axes_info
+
 
     def get_array_info(self):
         """Return the information about the array. Cif block: _array_structure_list_axis
@@ -177,7 +236,23 @@ class Extractor(extractor_interface.ExtractorInterface):
             dict: a dictionary containing the information about the array
         """
 
-        pass
+        x_px = self.scan_info['01'][1]['x_pixel_size']
+        y_px = self.scan_info['01'][1]['y_pixel_size']
+        array_dimension = self._raw_dict['detector'][0]['panels'][0]['image_size']
+        pixel_size = [x_px, y_px]
+
+        array_info = {
+            'axis_id' : None,
+            'axis_set_id': None,
+            'pixel_size' : pixel_size,
+            'array_id' : None,
+            'array_index' : None,
+            'array_dimension' : array_dimension,
+            'array_direction' : None,
+            'array_precedence' : None,
+        }
+        return array_info
+
 
     def get_detector_info(self):
         """Return the information about the detector. Cif block: _diffrn_detector
@@ -187,7 +262,19 @@ class Extractor(extractor_interface.ExtractorInterface):
             dict: a dictionary containing the information about the detector
         """
 
-        pass
+        print('# Entering detector info getter')
+
+        detector_id = self._raw_dict['detector'][0]['panels'][0]['identifier']
+        number_of_axes = len(self._raw_dict['detector'][0]['panels'][0]['image_size'])
+
+        detector_info = {
+            'detector_id' : detector_id,
+            'number_of_axes' : number_of_axes,
+            'axis_id' : None,
+            'detector_axis_id' : None
+        }
+        return detector_info
+
 
     def get_radiation_info(self):
         """Return the information about the wavelength an type of radiation.
@@ -197,7 +284,14 @@ class Extractor(extractor_interface.ExtractorInterface):
            dict: a dictionary containing the information about the radiation
         """
 
-        pass
+        print('# Entering radiation info getter')
+
+        rad_type = None
+        wavelength = self.scan_info['01'][1]['wavelength']
+
+        return {'rad_type' : rad_type,
+                'wavelength' : wavelength}
+
 
     def get_misc_info(self):
         """Return the information that was found about the doi and the array
@@ -207,7 +301,16 @@ class Extractor(extractor_interface.ExtractorInterface):
             dict: a dictionary containing the doi and the array intensities overload
         """
 
-        pass
+        print('# Entering misc info getter')
+
+        doi = None
+        overload = self._raw_dict['detector'][0]['panels'][0]['trusted_range'][1]
+        temperature = None
+        return {'doi' : doi,
+                'overload' : overload,
+                'temperature': temperature,
+                }
+
 
     def _ingest_json(self, filename):
         """Import the JSON content of an expt file into a temporary dictionary
