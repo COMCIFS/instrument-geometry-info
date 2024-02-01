@@ -397,16 +397,16 @@ class ImgCIFEntryGenerators():
                 the information should be written.
             detector_info (dict): information about the detector
         """
-
+        for dkey in detector_info.keys():
+            print(dkey, detector_info[dkey])
         base = "_diffrn_detector."
         cif_block[base + "id"] = detector_info["detector_id"]
-        cif_block[base + "number_of_axes"] = detector_info['number_of_axes']
+        cif_block[base + "number_of_axes"] = detector_info['number_of_axes'][0]
         cif_block.CreateLoop([base + "id", base + "number_of_axes"])
         base = "_diffrn_detector_axis."
         cif_block[base + "axis_id"] = detector_info['axis_id']
         cif_block[base + "detector_id"] = detector_info['detector_axis_id']
-        cif_block.CreateLoop([base + "axis_id", base + "detector_id"])
-
+        #cif_block.CreateLoop([base + "axis_id", base + "detector_id"])
 
     def generate_axes(self, cif_block, axes_info):
         """Generate the cif_block entries for the axes information.

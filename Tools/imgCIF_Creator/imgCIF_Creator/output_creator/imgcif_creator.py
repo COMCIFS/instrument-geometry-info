@@ -281,6 +281,14 @@ class ImgCIFCreator:
         Returns:
             dict: the information completed
         """
+        # DEBUG start -------------------------------------
+        print('Detector information pre check')
+        for dkey in detector_info.keys():
+            print(dkey, detector_info[dkey])
+        print('Axes info pre check')
+        for dkey in axes_info.keys():
+            print(dkey, axes_info[dkey])
+        # DEBUG end ---------------------------------------
 
         # does not include multiple detectors (yet?)
 
@@ -313,6 +321,11 @@ class ImgCIFCreator:
         detector_info["detector_axis_id"] = \
             detector_info["detector_id"] * len(detector_info["axis_id"])
 
+        # DEBUG start -------------------------------------
+        print('Detector info post check')
+        for dkey in detector_info.keys():
+            print(dkey, detector_info[dkey])
+        # DEBUG end ---------------------------------------
         return detector_info
 
 
@@ -617,11 +630,14 @@ not work for more than one detector, or non-rectangular detectors.')
 
         det_trans_axes = axes_info.get('det_trans_axes_found') \
             if axes_info.get('det_trans_axes_found') is not None else []
+        
+        print('DEBUG - function "_complete_detector_axes" object "det_trans_axes":')
+        print(det_trans_axes)
 
-        if len(det_trans_axes) > 1:
+        if len(det_trans_axes[0]) > 1:
             print(f"\nSome detector translation axes were found. The output \
 order reflects the stacking from closest to the detector to furthest from the \
-detector: The axes are: \n ==> {', '.join(det_trans_axes)}")
+detector: The axes are: \n =‚=> {', '.join(det_trans_axes[0])}")
 
             del self.cmd_parser.parsed['keep_axes']
             keep_axes = self.cmd_parser.request_input('keep_axes')

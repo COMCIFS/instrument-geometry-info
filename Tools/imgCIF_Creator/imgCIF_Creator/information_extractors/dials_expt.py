@@ -4,11 +4,12 @@ from an expt file created with DIALS from various original input.
 
 from inspect import getsourcefile
 import json
+import numpy as np
 import os
 import re
+from scipy.spatial.transform import Rotation as R
 import sys
 import yaml
-import numpy as np
 from imgCIF_Creator.output_creator import imgcif_creator
 from . import extractor_interface, full_cbf, extractor_utils
 
@@ -185,25 +186,132 @@ class Extractor(extractor_interface.ExtractorInterface):
             _ax_sense.append('c')
         return (_ax_names, _ax_sense)
 
+    """
+    get_two_theta(detector)
+
+    Work out the rotation required to make the normal to
+    the module parallel to the beam. This assumes that
+    the panel provided is perpendicular to the beam at
+    tth = 0. `detector` is a single "detector" entry.
+
+    JULIA CODE start ------------------------------------
+
+    get_two_theta(detector) = begin
+
+        pp = find_perp_panel(detector)
+
+        panel = detector["panels"][pp]
+        normal = LinearAlgebra.normalize(cross(panel["fast_axis"], panel["slow_axis"]))
+
+        @debug "Normal to surface" normal
+        if norm(normal - [0,0,1]) < 0.0001
+            return 0.0, nothing
+        end
+
+        if normal[3] > 0 #pointing towards sample 
+            normal = normal * -1.0
+        end
+
+        rb = rotation_between([0,0,-1],normal)
+        tth = rad2deg(rotation_angle(rb))
+        axis = rotation_axis(rb)
+
+        return tth, axis
+    end
+
+    JULIA CODE end ----------------------------------------
+    """
+
+    def _get_detector_panels(self):
+        """Extract the per-panel detector frame vectors (ss, fs) as in the
+           input dict (typically one such panel section per scan)
+
+           Returns: list of 2-tuples of 3-tuples, where list is over scans;
+                    outer tuple (flax, slax); inner tuple is vector (x,y,z)
+        """
+        _frame_vectors = []
+        det_info = self._raw_dict['detector']
+        print(f'detector stack contains {len(det_info)} entries')
+        for det in det_info:
+            fsax = tuple(det['panels'][0]['fast_axis'])
+            slax = tuple(det['panels'][0]['slow_axis'])
+            _frame_vectors.append((fsax, slax))
+
+        return _frame_vectors
+
+    def _get_two_theta(self, panel):
+        """For a given pair of detector frame axes (fast, slow) in
+           Dials expt notation, find the rotation operation from the
+           panel-normal vector to the beam vector, usually [0,0,1],
+           and return the axis-angle description of that rotation
+
+           Args:
+           - panel: a 2-tuple (fsax, slax) of 3-tuples (x,y,z)
+
+           Returns: an unpacked tuple: axis (orientiation vector), angle
+        """
+        fsax, slax = panel
+        #print('# input DET frame axes', fsax, slax)
+        p_orth = np.cross(fsax, slax)
+        #print('# plane ortho', p_orth)
+        p_norm = p_orth / np.linalg.norm(p_orth)
+        print('# plane norm', p_norm)
+        print('# delta vec', p_norm - np.array([0,0,-1]))
+        print('# norm of delta', np.linalg.norm(p_norm - np.array([0,0,-1])))
+        if np.linalg.norm(p_norm - np.array([0,0,-1])) < 0.001:
+            return (0,0,0), 0.0
+        if p_norm[2] > 0:
+            p_norm *= -1.0
+        rot_obj = R.align_vectors(np.array([0,0,-1]), p_norm)
+        rot_vec = rot_obj[0].as_rotvec(degrees=True)
+        rot_ang = np.linalg.norm(rot_vec)
+        rot_axs = rot_vec / rot_ang
+        print('# 2-theta axis', rot_axs, 'angle', rot_ang)
+        return rot_axs, rot_ang
+    
     def _stack_detrot_axes_from_scans(self):
         """Return a value for the dictionary 'det_rot_axes_found', which is
            a tuple of lists: ([rotation_axes], [rotation_senses])
+           ! BEFORE:
            ! This is setting constant fill values, because 'Detector_2theta'
            ! from the mini-CBF header is not taken over into .expt
+           ! ADAPTATION:
+           ! replace fill value with proper value from detector plane normal;
+           ! new function '_get_two_theta' ported from Julia
         """
         _n  = len(self.scan_info)
-        return (['detector_2theta' for _ in range(_n)], ['c' for _ in range(_n)])
+        # get the unique items in detector info
+        panel_axes = self._get_detector_panels()
+        print(panel_axes)
+        #exit()
+        # convert panel axes to relative (plane-normal) orientation wrt. beam
+        panel_2theta_ang = []
+        panel_2theta_axs = []
+        for p in panel_axes:
+            axs, ang = self._get_two_theta(p)
+            panel_2theta_ang.append(ang)
+            panel_2theta_axs.append(axs)
+        # map (reduce or expand) to scans list: TODO
+        scan_2theta_ang = []
+        scan_2theta_axs = []
+        # map_detconfig_to_scan()
+        scan_2theta_ang.append(panel_2theta_ang[1])
+        scan_2theta_axs.append(panel_2theta_axs[1])
+        #return (['detector_2theta' for _ in range(_n)], ['c' for _ in range(_n)])
+        return (['detector_2theta' for _ in range(_n)], [scan_2theta_ang[_] for _ in range(_n)])
     
 
     def _stack_det_trans_from_scans(self):
         """Return a value for the dictionary 'det_trans_axes_found', which is
            a simple list: [tranlation_axes]
         """
-        _distances = []
+        _dist_axes = []   # the 'distance axis' ids
+        _distances = []   # the distance values
         for scan in self.scan_info.keys():
             # tuple element [0] is the 'axes_settings' dictionary
+            _dist_axes.append('trans')
             _distances.append(self.scan_info[scan][0]['distance'])
-        return _distances
+        return (_dist_axes, _distances)
 
 
     def get_axes_info(self):
@@ -223,7 +331,7 @@ class Extractor(extractor_interface.ExtractorInterface):
         axes_info['gonio_axes_found'] = gonio_axes
         axes_info['det_rot_axes_found'] = det_rot_axes
         axes_info['det_trans_axes_found'] = det_trans
-
+        print('DEBUG - function "get_axes_info" return content:')
         print(axes_info)
         return axes_info
 
