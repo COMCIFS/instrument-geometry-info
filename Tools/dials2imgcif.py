@@ -700,7 +700,6 @@ def parse_commandline(argv):
     ap.add_argument(    
         "-l", "--location",
         help = "URL of archive containing all images (use -s for multiple archives)",
-        nargs = 1,
         metavar = "url",
     )
     ap.add_argument(
@@ -710,12 +709,10 @@ def parse_commandline(argv):
     )
     ap.add_argument(
         "-f", "--format",
-        nargs = 1,
         help = "Format of image files, should be one listed in imgCIF dictionary"
     )
     ap.add_argument(
         "-z", "--archive-type",
-        nargs = 1,
         help = "Type of overall archive, should be of type listed in imgCIF dictionary"
     )
     args = ap.parse_args(argv)
