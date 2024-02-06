@@ -82,6 +82,8 @@ class Extractor(extractor_interface.ExtractorInterface):
             dict: a dictionary containing the array intensities overload
         """
 
+        print('# Entering misc info getter')
+
         doi = self._full_header_dict.get('_database.dataset_doi')
         overload = self._full_header_dict.get('_array_intensities.overload')
         temperature = self._full_header_dict.get('_diffrn.ambient_temperature')
@@ -111,6 +113,8 @@ class Extractor(extractor_interface.ExtractorInterface):
         Returns:
             dict: a dictionary containing the information about the source
         """
+
+        print('# Entering source info getter')
 
         facility = None
         beamline = None
@@ -171,6 +175,8 @@ class Extractor(extractor_interface.ExtractorInterface):
         Returns:
             dict: a dictionary containing the information about the axes settings
         """
+
+        print('# Entering axes info getter')
 
         axes = self._full_header_dict.get('_axis.id')
         axis_type = self._full_header_dict.get('_axis.type')
@@ -238,6 +244,7 @@ as goniometer or detector axes.")
             axes_info['det_rot_axes_found'] = det_axes_senses
             axes_info['det_trans_axes_found'] = det_trans
 
+        #print(axes_info)
         return axes_info
 
 
@@ -248,6 +255,8 @@ as goniometer or detector axes.")
         Returns:
             dict: a dictionary containing the information about the array
         """
+
+        print('# Entering array info getter')
 
         # array structure list axis
         base = "_array_structure_list_axis."
@@ -292,6 +301,7 @@ as goniometer or detector axes.")
             'array_direction' : array_direction,
             'array_precedence' : array_precedence,
         }
+        print(array_info)
         return array_info
 
 
@@ -302,6 +312,8 @@ as goniometer or detector axes.")
         Returns:
             dict: a dictionary containing the information about the detector
         """
+
+        print('# Entering detector info getter')
 
         #TODO multiple detectors are not supportet (yet?)
         detector_id = \
@@ -329,7 +341,9 @@ as goniometer or detector axes.")
            dict: a dictionary containing the information about the radiation
         """
 
-        # TODO not creating a list of wavelength id's here (yet?)
+        print('# Entering radiation info getter')
+
+       # TODO not creating a list of wavelength id's here (yet?)
         rad_type = \
             self._full_header_dict.get('_diffrn_radiation.type')
 
@@ -364,6 +378,8 @@ as goniometer or detector axes.")
         Returns:
             dict: a dictionary containing the information about the scans
         """
+
+        print('# Entering scan-settings info getter')
 
         return self._scan_info_mini_header
 

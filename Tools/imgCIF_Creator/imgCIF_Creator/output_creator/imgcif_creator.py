@@ -44,6 +44,9 @@ class ImgCIFCreator:
         elif filetype == 'h5':
             extractor_module = importlib.import_module(
                 'imgCIF_Creator.information_extractors.hdf5_nxmx')
+        elif filetype == 'expt':
+            extractor_module = importlib.import_module(
+                'imgCIF_Creator.information_extractors.dials_expt')
 
         self.extractor = extractor_module.Extractor(filename, stem)
         self.cmd_parser = parser.CommandLineParser()
@@ -77,6 +80,7 @@ class ImgCIFCreator:
         array_info = self.check_array_completeness(array_info)
 
         scan_setting_info = self.extractor.get_scan_settings_info()
+        #print(scan_setting_info)
         # this is not checking anything right now
         scan_setting_info = self.check_scan_settings_completeness(scan_setting_info)
         # if always axes do not change and are at their home positions we want to
@@ -138,6 +142,8 @@ class ImgCIFCreator:
             dict: the information completed
         """
 
+        print('# Entering misc completeness checker')
+
         if self.param_is_none(misc_info['doi']):
             misc_info['doi'] = self.cmd_parser.request_input('doi')
 
@@ -156,6 +162,8 @@ class ImgCIFCreator:
         Returns:
             dict: the information completed
         """
+
+        print('# Entering source completeness checker')
 
         layout = ''
         if not any(source_info.values()):
@@ -273,8 +281,19 @@ class ImgCIFCreator:
         Returns:
             dict: the information completed
         """
+        # DEBUG start -------------------------------------
+        print('Detector information pre check')
+        for dkey in detector_info.keys():
+            print(dkey, detector_info[dkey])
+        print('Axes info pre check')
+        for dkey in axes_info.keys():
+            print(dkey, axes_info[dkey])
+        # DEBUG end ---------------------------------------
 
         # does not include multiple detectors (yet?)
+
+        print('# Entering detector completeness checker')
+
         if self.param_is_none(detector_info["detector_id"]):
             detector_info["detector_id"] = ['det1']
 
@@ -302,6 +321,11 @@ class ImgCIFCreator:
         detector_info["detector_axis_id"] = \
             detector_info["detector_id"] * len(detector_info["axis_id"])
 
+        # DEBUG start -------------------------------------
+        print('Detector info post check')
+        for dkey in detector_info.keys():
+            print(dkey, detector_info[dkey])
+        # DEBUG end ---------------------------------------
         return detector_info
 
 
@@ -606,11 +630,14 @@ not work for more than one detector, or non-rectangular detectors.')
 
         det_trans_axes = axes_info.get('det_trans_axes_found') \
             if axes_info.get('det_trans_axes_found') is not None else []
+        
+        print('DEBUG - function "_complete_detector_axes" object "det_trans_axes":')
+        print(det_trans_axes)
 
-        if len(det_trans_axes) > 1:
+        if len(det_trans_axes[0]) > 1:
             print(f"\nSome detector translation axes were found. The output \
 order reflects the stacking from closest to the detector to furthest from the \
-detector: The axes are: \n ==> {', '.join(det_trans_axes)}")
+detector: The axes are: \n =‚=> {', '.join(det_trans_axes[0])}")
 
             del self.cmd_parser.parsed['keep_axes']
             keep_axes = self.cmd_parser.request_input('keep_axes')
