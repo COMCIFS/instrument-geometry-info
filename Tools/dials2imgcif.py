@@ -7,8 +7,6 @@ Orignal author: Dr. James Hester, ANSTO, Lucas Heights, Australia
 from argparse import ArgumentParser
 import json
 import math
-from ssl import SSL_ERROR_WANT_X509_LOOKUP
-from stat import S_IFIFO
 import numpy as np
 import os
 import re
@@ -242,7 +240,7 @@ def get_srf_axes(expt):
                                    'origin': origin,
                                    'pix_size': panel['pixel_size'][0],
                                    'num_pix': panel['image_size'][0],
-                                   'prec': 0,
+                                   'prec': 1,
                                    'element': i
         }
         axis_dict[f'ele{i}_y'] = { 'axis': slow,
@@ -250,7 +248,7 @@ def get_srf_axes(expt):
                                    'origin': [0.0, 0.0, 0.0],
                                    'pix_size': panel['pixel_size'][1],
                                    'num_pix': panel['image_size'][1],
-                                   'prec': 1,
+                                   'prec': 2,
                                    'element': i
         }
 
@@ -436,6 +434,7 @@ loop_
  _axis.offset[1]
  _axis.offset[2]
  _axis.offset[3]
+
 """
     with open(fn, 'a') as outf:
         outf.write(loop_header)
@@ -445,20 +444,20 @@ loop_
 
         for k, v in g_axes.items():
             debug('Output axis now', k)
-            outf.write(f"  {k}   {v['next']}   goniometer  rotation   {v['axis'][0]} {v['axis'][1]} {v['axis'][2]}")
-            outf.write("   0.0 0.0 0.0\n")
+            outf.write(f"  {k:10}   {v['next']:10}  goniometer  rotation     {v['axis'][0]:8} {v['axis'][1]:8} {v['axis'][2]:8}")
+            outf.write("      0.0      0.0      0.0\n")
  
         # !!! Detector distance is currently not written - as well in the Julia reference
         debug('Detector info', d_axes)
         for k, v in d_axes.items():
             debug('Output axis now', k)
-            outf.write(f"  {k}   {v['next']}  detector  {v['type']}   {v['axis'][0]} {v['axis'][1]} {v['axis'][2]}")
-            outf.write("   0.0 0.0 0.0\n")
+            outf.write(f"  {k:10}   {v['next']:10}  detector    {v['type']:11}  {v['axis'][0]:8} {v['axis'][1]:8} {v['axis'][2]:8}")
+            outf.write("      0.0      0.0      0.0\n")
  
         for k, v in s_axes.items():
             debug('Output surface axis', k)
-            outf.write(f"  {k}   {v['next']}   detector  translation  {v['axis'][0]} {v['axis'][1]} {v['axis'][2]}")
-            outf.write(f"   {v['origin'][0]} {v['origin'][1]} {v['origin'][2]}\n")
+            outf.write(f"  {k:10}   {v['next']:10}  detector    translation  {v['axis'][0]:8} {v['axis'][1]:8} {v['axis'][2]:8}")
+            outf.write(f" {v['origin'][0]:8} {v['origin'][1]:8} {v['origin'][2]:8}\n")
 
         outf.write('\n')
 
@@ -472,7 +471,7 @@ def write_array_info(det_name, n_elms, s_axes, fn):
     with open(fn, 'a') as outf:
 
         outf.write(f"""
-_diffrn_detector.id {det_name}
+_diffrn_detector.id        {det_name}
 _diffrn_detector.diffrn_id DIFFRN
 """)
     
@@ -480,15 +479,17 @@ _diffrn_detector.diffrn_id DIFFRN
 loop_
  _diffrn_detector_element.id
  _diffrn_detector_element.detector_id
+                   
 """)
         for elm in range(n_elms):
-            outf.write(f'  ELEMENT{elm}    {det_name}\n')
+            outf.write(f'  ELEMENT{elm+1}    {det_name}\n')
         outf.write('\n')
     
         outf.write("""
 loop_
  _diffrn_detector_axis.detector_id
  _diffrn_detector_axis.axis_id
+                   
   DETECTOR Two_Theta
   DETECTOR Trans
 
@@ -497,6 +498,7 @@ loop_
  _array_structure_list_axis.axis_set_id
  _array_structure_list_axis.displacement
  _array_structure_list_axis.displacement_increment
+                   
 """)
         set_no = 1
         for axis, v in s_axes.items():
@@ -511,6 +513,7 @@ loop_
  _array_structure_list.index
  _array_structure_list.precedence
  _array_structure_list.dimension
+                   
 """)
         set_no = 1
         for axis, v in s_axes.items():
@@ -525,7 +528,7 @@ def write_scan_info(scan_list, g_axes, d_axes, fn):
 
     loop_header = ("""
 loop_
-  _diffrn_scan_axis.scan_id
+ _diffrn_scan_axis.scan_id
  _diffrn_scan_axis.axis_id
  _diffrn_scan_axis.displacement_start
  _diffrn_scan_axis.displacement_increment
@@ -533,6 +536,7 @@ loop_
  _diffrn_scan_axis.angle_start
  _diffrn_scan_axis.angle_increment
  _diffrn_scan_axis.angle_range
+                   
 """)
     
     with open(fn, 'a') as outf:
@@ -550,17 +554,17 @@ loop_
         
             for ax, v in g_axes.items():
                 if ax == scan['scan_axis']:
-                    outf.write(f"  {scan_id}  {ax}  . . . {scan['start']} {scan['step']} {scan['range']}\n")
+                    outf.write(f"  {scan_id} {ax:10}       .       .       . {scan['start']:7.2f} {scan['step']:7.2f} {scan['range']:7.2f}\n")
                 else:
-                    outf.write(f"  {scan_id}  {ax}  . . . {v['vals'][gi]} 0 0\n")
+                    outf.write(f"  {scan_id} {ax:10}       .       .       . {v['vals'][gi]:7.2f}       0       0\n")
 
             for ax, v in d_axes.items():
                 if ax == "Trans":
-                    outf.write(f"  {scan_id} {ax} {v['vals'][di]} 0.0 0.0 . . .\n")
+                    outf.write(f"  {scan_id} {ax:10} {v['vals'][di]:7.2f}     0.0     0.0       .       .       .\n")
                 else:
-                    outf.write(f"  {scan_id} {ax} . . . {v['vals'][di]} 0.0 0.0\n")
+                    outf.write(f"  {scan_id} {ax:10}       .       .       . {v['vals'][di]:7.2f}     0.0     0.0\n")
 
-        outf.write('\n')
+            outf.write('\n')
 
 def write_frame_ids(scan_list, fn):
 
@@ -571,12 +575,13 @@ loop_
  _diffrn_scan.frame_id_start
  _diffrn_scan.frame_id_end
  _diffrn_scan.frames
+                   
 """)
 
         counter = 1
         for s_ix, scan in enumerate(scan_list):
             end_cnt = counter + scan['num_frames'] - 1
-            outf.write(f"  SCAN0{s_ix} frm{counter}  frm{end_cnt} {scan['num_frames']}\n")
+            outf.write(f"  SCAN0{s_ix+1} frm{counter:<5}  frm{end_cnt:<5} {scan['num_frames']:5}\n")
             counter = end_cnt + 1
 
         # Assign frames to scans
@@ -586,13 +591,14 @@ loop_
  _diffrn_scan_frame.scan_id
  _diffrn_scan_frame.frame_number
  _diffrn_scan_frame.integration_time
+                   
 """)
 
         counter = 1
         for s_ix, scan in enumerate(scan_list):
             for f_ix in range(scan['num_frames']):
                 exp_time = scan['integration_time']
-                outf.write(f"  frm{counter}    SCAN0{s_ix}  {f_ix} {exp_time[f_ix]}\n")
+                outf.write(f"  frm{counter:<5}    SCAN0{s_ix+1}  {f_ix:5}   {exp_time[f_ix]:6}\n")
                 counter += 1
 
         outf.write('\n')
@@ -610,12 +616,13 @@ loop_
  _diffrn_data_frame.detector_element_id
  _diffrn_data_frame.array_id
  _diffrn_data_frame.binary_id
+                   
 """)
 
         counter = 1
         for scan in scan_list:
             for _ in range(scan['num_frames']):
-                outf.write(f"  frm{counter}    ELEMENT    IMAGE    {counter}\n")
+                outf.write(f"  frm{counter:<5}    ELEMENT    IMAGE    {counter:5}\n")
                 counter += 1
 
         outf.write('\n')
@@ -627,10 +634,11 @@ loop_
  _array_data.array_id
  _array_data.binary_id
  _array_data.external_data_id
+                   
 """)
 
         for i in range(counter-1):
-            outf.write(f"  IMAGE    {i+1}  {i+1}\n")
+            outf.write(f"  IMAGE    {i+1:5}  {i+1:5}\n")
 
 
 def write_external_locations(ext_info, scans, fn):
@@ -651,9 +659,9 @@ loop_
         counter = 1
         for (s_ix, extf) in enumerate(ext_info):
             for fr_ix in range(scans[s_ix]['num_frames']):
-                outf.write(f"  {counter}   {extf['image_type']} ")
+                outf.write(f"  {counter:5}   {extf['image_type']} ")
                 location = encode_scan_step(extf['tail'], fr_ix)
-                if 'arch_type' not in extf: 
+                if 'arch_type' not in extf:
                     outf.write(f'  {location}\n')
                 else:
                     outf.write(f"  {extf['archive']}  {extf['arch_type']}  {location}\n")
