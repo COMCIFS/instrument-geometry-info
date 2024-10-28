@@ -331,16 +331,16 @@ def gen_external_locations(scan_list, args):
         else:
             name_dict['archive'] = args['scans'][s_ix]
 
-        if args['format'] == []:
-            image_type = determine_file_type(args['tail'])
+        if not args['format']:
+            image_type = determine_file_type(name_dict['tail'])
         else:
             image_type = args['format']  # ! []
 
         if name_dict['archive'] is not None:
-            if args['archive-type'] == []:
+            if not args['archive_type']:
                 arch_type = determine_arch_type(name_dict['archive'])
             else:
-                arch_type = args['archive-type']  # ! []
+                arch_type = args['archive_type']  # ! []
 
             name_dict['arch_type'] = arch_type
 
