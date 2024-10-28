@@ -598,7 +598,7 @@ loop_
         for s_ix, scan in enumerate(scan_list):
             for f_ix in range(scan['num_frames']):
                 exp_time = scan['integration_time']
-                outf.write(f"  frm{counter:<5}    SCAN0{s_ix+1}  {f_ix:5}   {exp_time[f_ix]:6}\n")
+                outf.write(f"  frm{counter:<5}    SCAN0{s_ix+1}  {f_ix + 1:5}   {exp_time[f_ix]:6}\n")
                 counter += 1
 
         outf.write('\n')
@@ -659,7 +659,7 @@ loop_
 
         counter = 1
         for (s_ix, extf) in enumerate(ext_info):
-            for fr_ix in range(scans[s_ix]['num_frames']):
+            for fr_ix in range(1, scans[s_ix]['num_frames'] + 1):
                 outf.write(f"  {counter:5}   {extf['image_type']} ")
                 location = encode_scan_step(extf['tail'], fr_ix)
                 if 'arch_type' not in extf:
