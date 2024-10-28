@@ -479,7 +479,7 @@ _diffrn_detector.diffrn_id DIFFRN
 loop_
  _diffrn_detector_element.id
  _diffrn_detector_element.detector_id
-                   
+
 """)
         for elm in range(n_elms):
             outf.write(f'  ELEMENT{elm+1}    {det_name}\n')
@@ -489,7 +489,7 @@ loop_
 loop_
  _diffrn_detector_axis.detector_id
  _diffrn_detector_axis.axis_id
-                   
+
   DETECTOR Two_Theta
   DETECTOR Trans
 
@@ -498,7 +498,7 @@ loop_
  _array_structure_list_axis.axis_set_id
  _array_structure_list_axis.displacement
  _array_structure_list_axis.displacement_increment
-                   
+
 """)
         set_no = 1
         for axis, v in s_axes.items():
@@ -513,7 +513,7 @@ loop_
  _array_structure_list.index
  _array_structure_list.precedence
  _array_structure_list.dimension
-                   
+
 """)
         set_no = 1
         for axis, v in s_axes.items():
@@ -536,7 +536,7 @@ loop_
  _diffrn_scan_axis.angle_start
  _diffrn_scan_axis.angle_increment
  _diffrn_scan_axis.angle_range
-                   
+
 """)
     
     with open(fn, 'a') as outf:
@@ -575,7 +575,7 @@ loop_
  _diffrn_scan.frame_id_start
  _diffrn_scan.frame_id_end
  _diffrn_scan.frames
-                   
+
 """)
 
         counter = 1
@@ -591,7 +591,7 @@ loop_
  _diffrn_scan_frame.scan_id
  _diffrn_scan_frame.frame_number
  _diffrn_scan_frame.integration_time
-                   
+
 """)
 
         counter = 1
@@ -616,7 +616,7 @@ loop_
  _diffrn_data_frame.detector_element_id
  _diffrn_data_frame.array_id
  _diffrn_data_frame.binary_id
-                   
+
 """)
 
         counter = 1
@@ -634,7 +634,7 @@ loop_
  _array_data.array_id
  _array_data.binary_id
  _array_data.external_data_id
-                   
+
 """)
 
         for i in range(counter-1):
@@ -654,7 +654,8 @@ loop_
 """)
         if 'arch_type' in ext_info[0]:
             outf.write(' _array_data_external_data.archive_format\n')
-            outf.write(' _array_data_external_data.archive_pathnn\n')
+            outf.write(' _array_data_external_data.archive_path\n')
+        outf.write('\n')
 
         counter = 1
         for (s_ix, extf) in enumerate(ext_info):
