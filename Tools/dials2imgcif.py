@@ -675,13 +675,10 @@ def encode_scan_step(template, val):
         The resolved number will be a zero-filled integer as part of the file name.
         For instance: 01_#####.cbf --> 01_00123.cbf for frame 123
     """
-    m = re.match(r"(#+)\.", template)
-    if m is None:
-        return template   #cannot change
-    debug('Hash match', m)
-    n = len(m.match) # number of hashes, 0's will be filled pre framenum digits
-    num_field = f'{val:0{n}d}'
-    return num_field
+    def repl(match):
+        width = len(match[1])
+        return f"{val:0{width}}."
+    return re.sub(r"(#+)\.", repl, template)
 
 
 # ============= main ==============
