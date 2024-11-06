@@ -409,16 +409,16 @@ end
 
 output_axis_info(g_axes, d_axes, s_axes) = begin
     header = """loop_
-_axis.id
-_axis.depends_on
-_axis.equipment
-_axis.type
-_axis.vector[1]
-_axis.vector[2]
-_axis.vector[3]
-_axis.offset[1]
-_axis.offset[2]
-_axis.offset[3]
+ _axis.id
+ _axis.depends_on
+ _axis.equipment
+ _axis.type
+ _axis.vector[1]
+ _axis.vector[2]
+ _axis.vector[3]
+ _axis.offset[1]
+ _axis.offset[2]
+ _axis.offset[3]
 """
     println(header)
 
@@ -426,19 +426,19 @@ _axis.offset[3]
 
     for (k,v) in g_axes
         @debug "Output axis now $k"
-        print("$k   $(v["next"])   goniometer  rotation   $(v["axis"][1]) $(v["axis"][2]) $(v["axis"][3])")
+        print("  $k   $(v["next"])   goniometer  rotation   $(v["axis"][1]) $(v["axis"][2]) $(v["axis"][3])")
         println("   0.0 0.0 0.0")
     end
 
     for (k,v) in d_axes
         @debug "Output axis now $k"
-        print("$k   $(v["next"])   detector  $(v["type"])   $(v["axis"][1]) $(v["axis"][2]) $(v["axis"][3])")
+        print("  $k   $(v["next"])   detector  $(v["type"])   $(v["axis"][1]) $(v["axis"][2]) $(v["axis"][3])")
         println("   0.0 0.0 0.0")
     end
 
     for (k,v) in s_axes
         @debug "Output surface axis $k"
-        print("$k   $(v["next"])   detector  translation  $(v["axis"][1]) $(v["axis"][2]) $(v["axis"][3])")
+        print("  $k   $(v["next"])   detector  translation  $(v["axis"][1]) $(v["axis"][2]) $(v["axis"][3])")
         println("   $(v["origin"][1]) $(v["origin"][2]) $(v["origin"][3]) ")
 
     end
@@ -459,38 +459,39 @@ output_array_info(det_name, num_els, s_axes) = begin
         _diffrn_detector.diffrn_id DIFFRN
         """)
     
-    println("""loop_
-        _diffrn_detector_element.id
-        _diffrn_detector_element.detector_id
-        """)
+    println("""
+    loop_
+     _diffrn_detector_element.id
+     _diffrn_detector_element.detector_id
+    """)
         
     for one_el in 1:num_els
-        println("ELEMENT$one_el    $det_name")
+        println("  ELEMENT$one_el    $det_name")
     end
 
     println()
     
     println("""
     loop_
-    _diffrn_detector_axis.detector_id
-    _diffrn_detector_axis.axis_id
-     DETECTOR Two_Theta
-     DETECTOR Trans
+     _diffrn_detector_axis.detector_id
+     _diffrn_detector_axis.axis_id
+
+      DETECTOR Two_Theta
+      DETECTOR Trans
     """)
 
-    println()
-    
+
     println("""
         loop_
-          _array_structure_list_axis.axis_id
-          _array_structure_list_axis.axis_set_id
-          _array_structure_list_axis.displacement
-          _array_structure_list_axis.displacement_increment
-    """)
+         _array_structure_list_axis.axis_id
+         _array_structure_list_axis.axis_set_id
+         _array_structure_list_axis.displacement
+         _array_structure_list_axis.displacement_increment
+        """)
 
     set_no = 1
     for (axis, v) in s_axes
-        println("$axis    $set_no      $(v["pix_size"]/2)    $(v["pix_size"])")
+        println("  $axis    $set_no      $(v["pix_size"]/2)    $(v["pix_size"])")
         set_no += 1
     end
 
@@ -498,17 +499,17 @@ output_array_info(det_name, num_els, s_axes) = begin
     
     println("""
     loop_
-      _array_structure_list.array_id
-      _array_structure_list.axis_set_id
-      _array_structure_list.direction
-      _array_structure_list.index
-      _array_structure_list.precedence
-      _array_structure_list.dimension
+     _array_structure_list.array_id
+     _array_structure_list.axis_set_id
+     _array_structure_list.direction
+     _array_structure_list.index
+     _array_structure_list.precedence
+     _array_structure_list.dimension
     """)
 
     set_no = 1
     for (axis, v) in s_axes
-        println("1            $set_no          increasing              $(v["prec"]) $(v["prec"]) $(v["num_pix"])")
+        println("  1            $set_no          increasing              $(v["prec"]) $(v["prec"]) $(v["num_pix"])")
         set_no += 1
     end
 
@@ -520,15 +521,15 @@ end
 """
 output_scan_axes(scan_list, g_axes, d_axes) = begin
     println("""
-  loop_
-    _diffrn_scan_axis.scan_id
-    _diffrn_scan_axis.axis_id
-    _diffrn_scan_axis.displacement_start
-    _diffrn_scan_axis.displacement_increment
-    _diffrn_scan_axis.displacement_range
-    _diffrn_scan_axis.angle_start
-    _diffrn_scan_axis.angle_increment
-    _diffrn_scan_axis.angle_range
+    loop_
+     _diffrn_scan_axis.scan_id
+     _diffrn_scan_axis.axis_id
+     _diffrn_scan_axis.displacement_start
+     _diffrn_scan_axis.displacement_increment
+     _diffrn_scan_axis.displacement_range
+     _diffrn_scan_axis.angle_start
+     _diffrn_scan_axis.angle_increment
+     _diffrn_scan_axis.angle_range
     """)
 
     for (scan_no, one_scan) in enumerate(scan_list)
@@ -542,17 +543,17 @@ output_scan_axes(scan_list, g_axes, d_axes) = begin
         
         for (ax, v) in g_axes
             if ax == one_scan["scan_axis"]
-                println("$scanid  $ax  . . . $(one_scan["start"]) $(one_scan["step"]) $(one_scan["range"])")
+                println("  $scanid  $ax  . . . $(one_scan["start"]) $(one_scan["step"]) $(one_scan["range"])")
             else
-                println("$scanid  $ax  . . . $(v["vals"][gi]) 0 0")
+                println("  $scanid  $ax  . . . $(v["vals"][gi]) 0 0")
             end
         end
 
         for (ax, v) in d_axes
             if ax == "Trans"
-                println("$scanid $ax $(v["vals"][di]) 0.0 0.0 . . .")
+                println("  $scanid $ax $(v["vals"][di]) 0.0 0.0 . . .")
             else
-                println("$scanid $ax . . . $(v["vals"][di]) 0.0 0.0")
+                println("  $scanid $ax . . . $(v["vals"][di]) 0.0 0.0")
             end
         end
 
@@ -565,33 +566,34 @@ output_frame_ids(scan_list) = begin
 
     println("""
     loop_
-    _diffrn_scan.id 
-    _diffrn_scan.frame_id_start
-    _diffrn_scan.frame_id_end
-    _diffrn_scan.frames
+     _diffrn_scan.id
+     _diffrn_scan.frame_id_start
+     _diffrn_scan.frame_id_end
+     _diffrn_scan.frames
     """)
 
     counter = 1
     for (scan_no, one_scan) in enumerate(scan_list)
         end_cnt = counter + one_scan["num_frames"] - 1
-        println("SCAN0$scan_no frm$counter  frm$end_cnt $(one_scan["num_frames"])")
+        println("  SCAN0$scan_no frm$counter  frm$end_cnt $(one_scan["num_frames"])")
         counter = end_cnt + 1
     end
+    println()
 
     # Assign frames to scans
     println("""
-        loop_
-    _diffrn_scan_frame.frame_id
-    _diffrn_scan_frame.scan_id
-    _diffrn_scan_frame.frame_number
-    _diffrn_scan_frame.integration_time
+    loop_
+     _diffrn_scan_frame.frame_id
+     _diffrn_scan_frame.scan_id
+     _diffrn_scan_frame.frame_number
+     _diffrn_scan_frame.integration_time
     """)
 
     counter = 1
     for (scan_no, one_scan) in enumerate(scan_list)
         for one_frame in 1:one_scan["num_frames"]
             exp_time = one_scan["integration_time"]
-            println("frm$counter    SCAN0$scan_no  $one_frame $(exp_time[one_frame])")
+            println("  frm$counter    SCAN0$scan_no  $one_frame $(exp_time[one_frame])")
             counter += 1
         end
     end
@@ -606,16 +608,16 @@ end
 """
 output_frame_image(scan_info) = begin
     println("""loop_
-    _diffrn_data_frame.id
-    _diffrn_data_frame.detector_element_id
-    _diffrn_data_frame.array_id
-    _diffrn_data_frame.binary_id
+     _diffrn_data_frame.id
+     _diffrn_data_frame.detector_element_id
+     _diffrn_data_frame.array_id
+     _diffrn_data_frame.binary_id
     """)
 
     counter = 1
     for one_scan in scan_info
         for i in 1:one_scan["num_frames"]
-            println("frm$counter    ELEMENT    IMAGE    $counter")
+            println("  frm$counter    ELEMENT    IMAGE    $counter")
             counter += 1
         end
     end
@@ -625,15 +627,16 @@ output_frame_image(scan_info) = begin
     # Now link images with external locations
 
     println("""
-        loop_
-    _array_data.array_id
-    _array_data.binary_id
-    _array_data.external_data_id
+    loop_
+     _array_data.array_id
+     _array_data.binary_id
+     _array_data.external_data_id
     """)
 
     for i in 1:counter-1
-        println("IMAGE    $i  $i")
+        println("  IMAGE    $i  $i")
     end
+    println()
 
 end
 
@@ -643,23 +646,24 @@ end
 output_external_locations(ext_info, scan_list) = begin
     println("""
     loop_
-        _array_data_external_data.id
-        _array_data_external_data.format
-        _array_data_external_data.uri""")
+     _array_data_external_data.id
+     _array_data_external_data.format
+     _array_data_external_data.uri""")
     if haskey(ext_info[1],"arch_type")
-        println("     _array_data_external_data.archive_format")
-        println("     _array_data_external_data.archive_path")
+        println(" _array_data_external_data.archive_format")
+        println(" _array_data_external_data.archive_path")
     end
+    println()
 
     counter = 1
     for (scan_no, one_ext) in enumerate(ext_info)
         for one_file in 1:scan_list[scan_no]["num_frames"]
-            print("$counter   $(one_ext["image_type"]) ")
+            print("  $counter   $(one_ext["image_type"]) ")
             location = encode_scan_step(one_ext["tail"], one_file)
             if !haskey(one_ext, "arch_type") 
-                println("$location")
+                println("  $location")
             else
-                println("$(one_ext["archive"])  $(one_ext["arch_type"])  $location")
+                println("  $(one_ext["archive"])  $(one_ext["arch_type"])  $location")
             end
             counter += 1
         end

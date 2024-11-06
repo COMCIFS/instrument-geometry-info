@@ -470,7 +470,7 @@ def write_array_info(det_name, n_elms, s_axes, fn):
 
     with open(fn, 'a') as outf:
 
-        outf.write(f"""
+        outf.write(f"""\
 _diffrn_detector.id        {det_name}
 _diffrn_detector.diffrn_id DIFFRN
 """)
@@ -485,7 +485,7 @@ loop_
             outf.write(f'  ELEMENT{elm+1}    {det_name}\n')
         outf.write('\n')
     
-        outf.write("""
+        outf.write("""\
 loop_
  _diffrn_detector_axis.detector_id
  _diffrn_detector_axis.axis_id
@@ -526,7 +526,7 @@ def write_scan_info(scan_list, g_axes, d_axes, fn):
     """ Output scan axis information 
     """
 
-    loop_header = ("""
+    loop_header = ("""\
 loop_
  _diffrn_scan_axis.scan_id
  _diffrn_scan_axis.axis_id
@@ -569,9 +569,9 @@ loop_
 def write_frame_ids(scan_list, fn):
 
     with open(fn, 'a') as outf:
-        outf.write("""
+        outf.write("""\
 loop_
- _diffrn_scan.id 
+ _diffrn_scan.id
  _diffrn_scan.frame_id_start
  _diffrn_scan.frame_id_end
  _diffrn_scan.frames
@@ -610,7 +610,7 @@ def write_frame_images(scan_list, fn):
     """
     
     with open(fn, 'a') as outf:
-        outf.write("""
+        outf.write("""\
 loop_
  _diffrn_data_frame.id
  _diffrn_data_frame.detector_element_id
@@ -629,7 +629,7 @@ loop_
     
         # Now link images with external locations
 
-        outf.write("""
+        outf.write("""\
 loop_
  _array_data.array_id
  _array_data.binary_id
@@ -660,7 +660,7 @@ loop_
         counter = 1
         for (s_ix, extf) in enumerate(ext_info):
             for fr_ix in range(1, scans[s_ix]['num_frames'] + 1):
-                outf.write(f"  {counter:5}   {extf['image_type']} ")
+                outf.write(f"  {counter}   {extf['image_type']} ")
                 location = encode_scan_step(extf['tail'], fr_ix)
                 if 'arch_type' not in extf:
                     outf.write(f'  {location}\n')
