@@ -219,7 +219,7 @@ def get_srf_axes(expt):
     axis_dict = {}
     
     tth_angl, tth_axis = get_two_theta(d_info)
-    for i, panel in enumerate(d_info['panels']):
+    for i, panel in enumerate(d_info['panels'], start=1):
         fast = panel['fast_axis']
         slow = panel['slow_axis']
         origin = panel['origin']
