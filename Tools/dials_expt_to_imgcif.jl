@@ -162,12 +162,12 @@ get_two_theta(detector) = begin
     normal = LinearAlgebra.normalize(cross(panel["fast_axis"], panel["slow_axis"]))
 
     @debug "Normal to surface" normal
-    if norm(normal - [0,0,1]) < 0.0001
-        return 0.0, nothing
+    if normal[3] > 0 #pointing towards sample
+        normal = normal * -1.0
     end
 
-    if normal[3] > 0 #pointing towards sample 
-        normal = normal * -1.0
+    if norm(normal - [0,0,-1]) < 0.0001
+        return 0.0, nothing
     end
 
     rb = rotation_between([0,0,-1],normal)
@@ -423,8 +423,6 @@ _axis.offset[3]
     println(header)
 
     # round values
-
-    tth = map(x -> round(x, digits = 6), d_axes["Two_Theta"]["axis"])
 
     for (k,v) in g_axes
         @debug "Output axis now $k"

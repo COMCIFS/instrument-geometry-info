@@ -171,11 +171,11 @@ def get_two_theta(detector):
     p_onrm = p_orth / np.linalg.norm(p_orth)
     #debug('Normal to surface', p_onrm)
 
+    if p_onrm[2] > 0: #pointing towards sample
+        p_onrm *= -1.0
+
     if np.linalg.norm(p_onrm - [0,0,-1]) < 0.0001:
         return 0.0, None
-
-    if p_onrm[2] > 0: #pointing towards sample 
-        p_onrm *= -1.0
 
     rot_obj = R.align_vectors(np.array([0,0,-1]), p_onrm)
     rot_vec = rot_obj[0].as_rotvec(degrees=True)
