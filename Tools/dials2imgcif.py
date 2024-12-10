@@ -418,6 +418,19 @@ _diffrn_radiation.type             xray
     with open(fn, 'a') as outf:
         outf.write(cif_block)
 
+def cif_loop(base_name: str, fields: list, rows) -> str:
+    """Assemble a loop_ table ready to be written to a CIF file"""
+    for i, row in enumerate(rows, start=1):
+        if len(row) != len(fields):
+            raise ValueError(
+                f"Row {i} has unexpected length ({len(row)} != {len(fields)}"
+            )
+    lines = ["loop_"] + [
+        f" {base_name}.{f}" for f in fields
+    ] + [""] + [
+        "  " + "\t".join([str(v) for v in r]) for r in rows
+    ] + ["", ""]
+    return "\n".join(lines)
 
 def write_axis_info(g_axes, d_axes, s_axes, fn):
     """ Write CIF syntax for all axes of the experiment, where axes
@@ -571,39 +584,32 @@ loop_
 def write_frame_ids(scan_list, fn):
 
     with open(fn, 'a') as outf:
-        outf.write("""\
-loop_
- _diffrn_scan.id
- _diffrn_scan.frame_id_start
- _diffrn_scan.frame_id_end
- _diffrn_scan.frames
-
-""")
-
+        rows = []
         counter = 1
-        for s_ix, scan in enumerate(scan_list):
+        for s_ix, scan in enumerate(scan_list, start=1):
             end_cnt = counter + scan['num_frames'] - 1
-            outf.write(f"  SCAN0{s_ix+1} frm{counter:<5}  frm{end_cnt:<5} {scan['num_frames']:5}\n")
+            rows.append((f"SCAN{s_ix:02}", f"frm{counter}", f"frm{end_cnt}", scan['num_frames']))
             counter = end_cnt + 1
 
-        # Assign frames to scans
-        outf.write("""
-loop_
- _diffrn_scan_frame.frame_id
- _diffrn_scan_frame.scan_id
- _diffrn_scan_frame.frame_number
- _diffrn_scan_frame.integration_time
+        outf.write(cif_loop(
+            "_diffrn_scan",
+            ["id", "frame_id_start", "frame_id_end", "frames"],
+            rows
+        ))
 
-""")
-
+        rows = []
         counter = 1
-        for s_ix, scan in enumerate(scan_list):
+        for s_ix, scan in enumerate(scan_list, start=1):
             for f_ix in range(scan['num_frames']):
                 exp_time = scan['integration_time']
-                outf.write(f"  frm{counter:<5}    SCAN0{s_ix+1}  {f_ix + 1:5}   {exp_time[f_ix]:6}\n")
+                rows.append((f"frm{counter}", f"SCAN{s_ix:02}", f_ix + 1, exp_time[f_ix]))
                 counter += 1
 
-        outf.write('\n')
+        outf.write(cif_loop(
+            "_diffrn_scan_frame",
+            ["frame_id", "scan_id", "frame_number", "integration_time"],
+            rows
+        ))
 
 
 def write_frame_images(scan_list, fn):
@@ -612,35 +618,26 @@ def write_frame_images(scan_list, fn):
     """
     
     with open(fn, 'a') as outf:
-        outf.write("""\
-loop_
- _diffrn_data_frame.id
- _diffrn_data_frame.detector_element_id
- _diffrn_data_frame.array_id
- _diffrn_data_frame.binary_id
-
-""")
-
+        rows = []
         counter = 1
         for scan in scan_list:
             for _ in range(scan['num_frames']):
-                outf.write(f"  frm{counter:<5}    ELEMENT    IMAGE    {counter:5}\n")
+                rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
                 counter += 1
 
-        outf.write('\n')
+        outf.write(cif_loop(
+            "_diffrn_data_frame",
+            ["id", "detector_element_id", "array_id", "binary_id"],
+            rows
+        ))
     
         # Now link images with external locations
 
-        outf.write("""\
-loop_
- _array_data.array_id
- _array_data.binary_id
- _array_data.external_data_id
-
-""")
-
-        for i in range(counter-1):
-            outf.write(f"  IMAGE    {i+1:5}  {i+1:5}\n")
+        outf.write(cif_loop(
+            "_array_data",
+            ["array_id", "binary_id", "external_data_id"],
+            [("IMAGE", i, i) for i in range(1, counter)]
+        ))
 
 
 def write_external_locations(ext_info, scans, fn):
@@ -648,7 +645,7 @@ def write_external_locations(ext_info, scans, fn):
     """
 
     with open(fn, 'a') as outf:
-        outf.write("""
+        outf.write("""\
 loop_
  _array_data_external_data.id
  _array_data_external_data.format
