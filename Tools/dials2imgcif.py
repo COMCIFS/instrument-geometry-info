@@ -4,14 +4,16 @@ https://github.com/COMCIFS/instrument-geometry-info/blob/main/Tools/dials_expt_t
 Orignal author: Dr. James Hester, ANSTO, Lucas Heights, Australia 
 """
 
-from argparse import ArgumentParser
 import json
 import math
-import numpy as np
 import os
 import re
-from scipy.spatial.transform import Rotation as R
 import sys
+from argparse import ArgumentParser
+from pathlib import Path
+
+import numpy as np
+from scipy.spatial.transform import Rotation as R
 
 #=== Utilities ===
 # will go into an external library source-file later
@@ -397,13 +399,11 @@ def determine_file_type(file_name):
 
 # ============ Output =============
 
-def cif_init(fn):
-
-    id = fn.split('.')[0]
+def cif_init(fn: Path):
     cif_header = f"""#\\#CIF_2.0
 # CIF converted from DIALS .expt file
 # Conversion routine version 0.1
-data_{id}
+data_{fn.stem}
 """
     with open(fn, 'w') as outf:
         outf.write(cif_header)
@@ -690,14 +690,15 @@ def parse_commandline(argv):
     ap = ArgumentParser(prog="dials2imgcif")
     ap.add_argument(
         "input_fn",
+        type=Path,
         help="Experiment description in JSON format as produced by DIALS "
              "(typically '<input_fn>.expt') "
     )
     ap.add_argument(
-        "-o", "--output_fn",
+        "-o", "--output-file",
         default='exptinfo.cif',
+        type=Path,
         help="File name for the imgCIF output"
-             "(to create'<output_fn>.cif') "
     )
     ap.add_argument(
         "-s", "--scans",
@@ -730,11 +731,12 @@ def parse_commandline(argv):
 def main():
 
     args = parse_commandline(sys.argv[1:])
-    inp_fn = args.input_fn
-    out_fn = args.output_fn + '.cif'
+    out_fn = args.output_file
+    if not out_fn.suffix:
+        out_fn = out_fn.with_suffix('.cif')
 
     cif_init(out_fn)
-    expt = extract_raw_info(inp_fn)
+    expt = extract_raw_info(args.input_fn)
 
     wl = get_beam_info(expt)
     write_beam_info(wl, out_fn)
