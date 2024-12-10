@@ -90,16 +90,18 @@ def get_gon_axes(expt):
 
     if 'names' not in g_dict:  # single axis then
         assert(len(g_info) == 1)
-        axis_dict['Omega'] = {'axis': g_dict['rotation_axis']}
+        axis_dict['Omega'] = {
+            'axis': g_dict['rotation_axis'],
+            'next': '.',
+        }
         
     else:
         n_axes = len(g_dict['names'])
         for i in range(n_axes):
-            ax_vec = g_dict['axes'][i]
-            ax_ang = [x['angles'][i] for x in g_info]
-            axis_dict[g_dict['names'][i]] = { 'axis': ax_vec,
-                                              'vals': ax_ang,
-                                              'next': '.' if i == (n_axes-1) else f'{g_dict["names"][i+1]}' 
+            axis_dict[g_dict['names'][i]] = {
+                'axis': g_dict['axes'][i],
+                'vals': [x['angles'][i] for x in g_info],
+                'next': '.' if i == (n_axes-1) else f'{g_dict["names"][i+1]}'
             }
     debug('axes in processed dict', axis_dict)
     
