@@ -143,22 +143,23 @@ def get_det_axes(expt):
 
     # Only a non-zero tth will give us the axis direction, else no tth required
     poss_axes = [x for x in axis_info if x[1] is not None]
-    tth_axis = None
     debug('Possible axes:', poss_axes)
 
     if len(poss_axes) > 0:
-        axis_dict['Two_Theta'] = {'axis': poss_axes[0][1],  # strictly != first(...) in Julia
-                                  'vals': [x[0] for x in axis_info],
-                                  'next': '.',
-                                  'type': 'rotation'
+        axis_dict['Two_Theta'] = {
+            'axis': poss_axes[0][1],  # strictly != first(...) in Julia
+            'vals': [x[0] for x in axis_info],
+            'next': '.',
+            'type': 'rotation'
         }
     
     dists = [get_distance(x['panels'][pp]) for x in d_info]
 
-    axis_dict['Trans'] = {'axis': [0, 0, -1],
-                          'vals': dists,
-                          'next': 'Two_Theta',
-                          'type': 'translation'
+    axis_dict['Trans'] = {
+        'axis': [0, 0, -1],
+        'vals': dists,
+        'next': 'Two_Theta' if ('Two_Theta' in axis_dict) else '.',
+        'type': 'translation'
     }
     return axis_dict
 
@@ -482,7 +483,7 @@ loop_
         outf.write('\n')
 
 
-def write_array_info(det_name, n_elms, s_axes, fn):
+def write_array_info(det_name, n_elms, s_axes, d_axes, fn):
     """ Output information about the layout of the pixels. We assume two axes,
         with the first one the fast direction, and that there is no dead space
         between pixels.
@@ -504,15 +505,14 @@ loop_
         for elm in range(n_elms):
             outf.write(f'  ELEMENT{elm+1}    {det_name}\n')
         outf.write('\n')
-    
-        outf.write("""\
-loop_
- _diffrn_detector_axis.detector_id
- _diffrn_detector_axis.axis_id
 
-  DETECTOR Two_Theta
-  DETECTOR Trans
+        outf.write(cif_loop(
+            "_diffrn_detector_axis",
+            ["detector_id", "axis_id"],
+            [("DETECTOR", ax) for ax in d_axes]
+        ))
 
+        outf.write("""
 loop_
  _array_structure_list_axis.axis_id
  _array_structure_list_axis.axis_set_id
@@ -520,6 +520,7 @@ loop_
  _array_structure_list_axis.displacement_increment
 
 """)
+
         set_no = 1
         for axis, v in s_axes.items():
             outf.write(f"  {axis}    {set_no}      {v['pix_size']/2}    {v['pix_size']}\n")
@@ -748,7 +749,7 @@ def main():
 
     write_array_info('DETECTOR',
                      len(expt['detector'][0]['panels']),
-                     s_ax, out_fn)
+                     s_ax, d_ax, out_fn)
 
     scans = get_scan_info(expt)
     write_scan_info(scans, g_ax, d_ax, out_fn)
