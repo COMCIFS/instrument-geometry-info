@@ -15,6 +15,8 @@ from pathlib import Path
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+GONIO_DEFAULT_AXIS = 'Omega'  # Used when goniometer has 1 nameless axis
+
 #=== Utilities ===
 # will go into an external library source-file later
 
@@ -92,7 +94,7 @@ def get_gon_axes(expt):
 
     if 'names' not in g_dict:  # single axis then
         assert(len(g_info) == 1)
-        axis_dict['Omega'] = {
+        axis_dict[GONIO_DEFAULT_AXIS] = {
             'axis': g_dict['rotation_axis'],
             'next': '.',
         }
@@ -285,7 +287,10 @@ def get_scan_info(expt):
         scan_info = {}
 
         gonio = expt['goniometer'][e_block['goniometer']] # gonio info that the index in scan info points to
-        scan_ax = gonio['names'][gonio['scan_axis']]
+        if 'names' in gonio:
+            scan_ax = gonio['names'][gonio['scan_axis']]
+        else:
+            scan_ax = GONIO_DEFAULT_AXIS
 
         # get scan information
 
