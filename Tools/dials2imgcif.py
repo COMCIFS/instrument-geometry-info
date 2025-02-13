@@ -326,39 +326,47 @@ def gen_external_locations(scan_list, args):
         Returns: a list of image file info dictionaries per scan
     """
 
+    n_scans = len(scan_list)
+    url_bases = urls = None
+    if args.url_base:
+        if len(args.url_base) == 1:
+            url_bases = args.url_base * n_scans
+        elif len(args.url_base) == n_scans:
+            url_bases = args.url_base
+        else:
+            raise ValueError(
+                f"--url-bases should have 1 parameter or 1 per scan ({n_scans})"
+            )
+    elif args.url:
+        if len(args.url) == 1:
+            urls = args.url * n_scans
+        elif len(args.url) == n_scans:
+            urls = args.url
+        else:
+            raise ValueError(f"--url should have 1 parameter or 1 per scan ({n_scans})")
+    else:
+        raise ValueError("--url or --url-base is required")
+
     ext_info = []
 
     for (s_ix, expt) in enumerate(scan_list):
-        local_name = expt['images'] # complete local path as in expt
+        local_name = Path(expt['images']) # complete local path as in expt
+        template_rel_path = local_name.relative_to(args.dir)
+
         name_dict = {}
-        name_dict['tail'] = find_filename(local_name, args['cut'])
-        if args['scans'] is None:
-            if args['location'] is not None:
-                name_dict['archive'] = args['location']  # ! []
-            else:
-                name_dict['archive'] = None
-                name_dict['tail'] = local_name
+        if url_bases is not None:
+            ub = url_bases[s_ix]
+            name_dict['uri_template'] = ub.rstrip('/') + '/' + str(template_rel_path)
         else:
-            name_dict['archive'] = args['scans'][s_ix]
+            name_dict['uri'] = url = urls[s_ix]
+            name_dict['archive_format'] = args.archive_type or guess_archive_type(url)
+            name_dict['archive_path_template'] = str(template_rel_path)
 
-        if not args['format']:
-            image_type = determine_file_type(name_dict['tail'])
-        else:
-            image_type = args['format']  # ! []
+        name_dict['format'] = args.format or guess_file_type(template_rel_path.name)
 
-        if name_dict['archive'] is not None:
-            if not args['archive_type']:
-                arch_type = determine_arch_type(name_dict['archive'])
-            else:
-                arch_type = args['archive_type']  # ! []
-
-            name_dict['arch_type'] = arch_type
-
-        name_dict['image_type'] = image_type
-        
         ext_info.append(name_dict)
+        debug('External name dictionary', name_dict)
 
-    debug('External name dictionary', name_dict)
     return ext_info
 
 
@@ -376,31 +384,27 @@ def find_filename(full_name, cutspec):
     return full_name
 
 
-def determine_arch_type(arch_name):
-
-    comps = arch_name.split('.')
-
-    if comps[-1] == 'tgz' or (comps[-2] == 'tar' and comps[-1] == 'gz'):
+def guess_archive_type(url: str):
+    if url.endswith(('.tgz', '.tar.gz')):
         return 'TGZ'
-    
-    if comps[-1] == 'tbz' or (comps[-2] == 'tar' and comps[-1] == 'bz2'):
+    elif url.endswith(('.tbz', '.tar.bz2')):
         return 'TBZ'
-
-    if comps[-1] == 'zip':
+    elif url.endswith(('.txz', '.tar.xz')):
+        return 'TXZ'
+    elif url.endswith('.zip'):
         return 'ZIP'
 
-    if comps[-1] == 'txz' or (comps[-2] == 'tar' and comps[-1] == 'xz'):
-        return 'TXZ'
+    print(f"WARNING: could not guess archive type from URL ({url})")
+    return '???'
     
 
-def determine_file_type(file_name):
-    
-    comps = file_name.split('.')
-
-    if comps[-1] == 'cbf':
+def guess_file_type(name: str):
+    if name.endswith('.cbf'):
         return 'CBF'
+    elif name.endswith(('.h5', '.nxs')):
+        return 'HDF5'
     else:
-        print("WARNING: Unable to determine type of image file")
+        print(f"WARNING: Unable to determine type of image file ({name})")
         return '???'
 
 # ============ Output =============
@@ -649,29 +653,33 @@ def write_frame_images(scan_list, fn):
 def write_external_locations(ext_info, scans, fn):
     """ External locations must be of uniform type, and organised in scan order.
     """
+    fields = ['id', 'format', 'uri']
+    if 'archive_format' in ext_info[0]:
+        fields += ['archive_format', 'archive_path']
+    if ext_info[0]['format'] == 'HDF5':
+        fields += ['path', 'frame']
+
+    counter = 1
+    rows = []
+    for (s_ix, extf) in enumerate(ext_info):
+        for fr_ix in range(1, scans[s_ix]['num_frames'] + 1):
+            r = [counter, extf['format']]
+            if 'uri_template' in extf:
+                r += [encode_scan_step(extf['uri_template'], fr_ix)]
+            else:
+                r += [extf['uri']]
+
+            if 'archive_format' in extf:
+                r += [extf['archive_format'],
+                      encode_scan_step(extf['archive_path_template'], fr_ix)]
+
+            if extf['format'] == 'HDF5':
+                r += [..., ...]  # TODO
+            rows.append(r)
+            counter += 1
 
     with open(fn, 'a') as outf:
-        outf.write("""\
-loop_
- _array_data_external_data.id
- _array_data_external_data.format
- _array_data_external_data.uri
-""")
-        if 'arch_type' in ext_info[0]:
-            outf.write(' _array_data_external_data.archive_format\n')
-            outf.write(' _array_data_external_data.archive_path\n')
-        outf.write('\n')
-
-        counter = 1
-        for (s_ix, extf) in enumerate(ext_info):
-            for fr_ix in range(1, scans[s_ix]['num_frames'] + 1):
-                outf.write(f"  {counter}   {extf['image_type']} ")
-                location = encode_scan_step(extf['tail'], fr_ix)
-                if 'arch_type' not in extf:
-                    outf.write(f'  {location}\n')
-                else:
-                    outf.write(f"  {extf['archive']}  {extf['arch_type']}  {location}\n")
-                counter += 1
+        outf.write(cif_loop("_array_data_external_data", fields, rows))
 
 
 def encode_scan_step(template, val):
@@ -704,20 +712,20 @@ def parse_commandline(argv):
         help="File name for the imgCIF output"
     )
     ap.add_argument(
-        "-s", "--scans",
-        nargs = '+',
-        help = "Full URL of archive for each scan, in order",
-        metavar = "url"
-    )
-    ap.add_argument(    
-        "-l", "--location",
-        help = "URL of archive containing all images (use -s for multiple archives)",
-        metavar = "url",
+        "--url",
+        nargs="+",
+        help="Full URL of archive, or one archive per scan, in order",
     )
     ap.add_argument(
-        "-c", "--cut",
-        metavar = "match",
-        help = "All characters in local file name following <match> refer to location within archive"
+        "--url-base",
+        nargs="+",
+        help="Individual image files can be downloaded relative to this base URL",
+        metavar="url",
+    )
+    ap.add_argument(
+        "--dir",
+        type=Path,
+        help="Local folder equivalent to unpacked archive(s) or URL base"
     )
     ap.add_argument(
         "-f", "--format",
@@ -756,7 +764,7 @@ def main():
     write_frame_ids(scans, out_fn)
     write_frame_images(scans, out_fn)
 
-    ext_info = gen_external_locations(scans, vars(args)) 
+    ext_info = gen_external_locations(scans, args)
     write_external_locations(ext_info, scans, out_fn)
 
 
