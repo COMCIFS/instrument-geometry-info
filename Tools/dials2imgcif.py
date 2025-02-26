@@ -12,6 +12,7 @@ import sys
 from argparse import ArgumentParser
 from pathlib import Path
 
+import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
@@ -354,35 +355,36 @@ def gen_external_locations(scan_list, args):
         local_name = Path(expt['images']) # complete local path as in expt
         template_rel_path = local_name.relative_to(args.dir)
 
-        name_dict = {}
-        if url_bases is not None:
-            ub = url_bases[s_ix]
-            name_dict['uri_template'] = ub.rstrip('/') + '/' + str(template_rel_path)
+        fmt = args.format or guess_file_type(template_rel_path.name)
+
+        if fmt == 'HDF5':
+            total_n_frames = 0
+            for file_rel_path, obj_path, n in find_hdf5_images(local_name, args.dir):
+                d = {'format': fmt, 'num_frames': n, 'path': obj_path}
+                if url_bases is not None:
+                    ub = url_bases[s_ix]
+                    d['uri_template'] = ub.rstrip('/') + '/' + str(file_rel_path)
+                else:
+                    d['uri'] = url = urls[s_ix]
+                    d['archive_format'] = args.archive_type or guess_archive_type(url)
+                    d['archive_path_template'] = str(file_rel_path)
+                total_n_frames += n
+                ext_info.append(d)
+                print(f"{n} images in file {file_rel_path}")
+            assert total_n_frames == expt['num_frames']
         else:
-            name_dict['uri'] = url = urls[s_ix]
-            name_dict['archive_format'] = args.archive_type or guess_archive_type(url)
-            name_dict['archive_path_template'] = str(template_rel_path)
-
-        name_dict['format'] = args.format or guess_file_type(template_rel_path.name)
-
-        ext_info.append(name_dict)
-        debug('External name dictionary', name_dict)
+            d = {'format': fmt, 'num_frames': expt['num_frames']}
+            if url_bases is not None:
+                ub = url_bases[s_ix]
+                d['uri_template'] = ub.rstrip('/') + '/' + str(template_rel_path)
+            else:
+                d['uri'] = url = urls[s_ix]
+                d['archive_format'] = args.archive_type or guess_archive_type(url)
+                d['archive_path_template'] = str(template_rel_path)
+            ext_info.append(d)
+            debug('External name dictionary', d)
 
     return ext_info
-
-
-def find_filename(full_name, cutspec):
-
-    a = re.match(cutspec, full_name)
-    debug('Match object', a)
-    if a is None:
-        print(f'Could not find {cutspec} in {full_name}')
-    else:
-        tl_st = a.span()[0] + len(cutspec)
-        debug('Trimmed part to keep', full_name[tl_st:])
-        return full_name[tl_st:]
-
-    return full_name
 
 
 def guess_archive_type(url: str):
@@ -407,6 +409,23 @@ def guess_file_type(name: str):
     else:
         print(f"WARNING: Unable to determine type of image file ({name})")
         return '???'
+
+
+def find_hdf5_images(master_path, dir):
+    master = h5py.File(master_path, 'r')
+    data_grp = master['/entry/data']
+    for name in sorted(data_grp):
+        link = data_grp.get(name, getlink=True)
+        dset = data_grp[name]
+        if isinstance(link, h5py.ExternalLink):
+            file_path = (master_path.parent / link.filename).relative_to(dir)
+            obj_path = link.path
+        else:
+            file_path = master_path.relative_to(dir)
+            obj_path = dset.name
+
+        yield file_path, obj_path, dset.shape[0]
+
 
 # ============ Output =============
 
@@ -662,8 +681,8 @@ def write_external_locations(ext_info, scans, fn):
 
     counter = 1
     rows = []
-    for (s_ix, extf) in enumerate(ext_info):
-        for fr_ix in range(1, scans[s_ix]['num_frames'] + 1):
+    for extf in ext_info:
+        for fr_ix in range(1, extf['num_frames'] + 1):
             r = [counter, extf['format']]
             if 'uri_template' in extf:
                 r += [encode_scan_step(extf['uri_template'], fr_ix)]
@@ -675,7 +694,7 @@ def write_external_locations(ext_info, scans, fn):
                       encode_scan_step(extf['archive_path_template'], fr_ix)]
 
             if extf['format'] == 'HDF5':
-                r += [..., ...]  # TODO
+                r += [extf['path'], fr_ix]
             rows.append(r)
             counter += 1
 
