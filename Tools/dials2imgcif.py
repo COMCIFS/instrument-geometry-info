@@ -296,9 +296,10 @@ def get_scan_info(expt):
         # get scan information
 
         s_block = expt['scan'][e_block['scan']]
-        start = s_block['oscillation'][0]
-        step = s_block['oscillation'][1]
-        num_frames = len(s_block['exposure_time'])
+        num_frames = len(s_block['properties']['exposure_time'])
+        start = s_block['properties']['oscillation'][0]
+        final = s_block['properties']['oscillation'][-1]
+        step = (final - start) / (num_frames - 1)
         full_range = step * num_frames # to end of final step
 
         # Store
@@ -310,7 +311,7 @@ def get_scan_info(expt):
         scan_info['gonio_idx'] = e_block['goniometer']
         scan_info['det_idx'] = e_block['detector']
         scan_info['num_frames'] = num_frames
-        scan_info['integration_time'] = s_block['exposure_time']
+        scan_info['integration_time'] = s_block['properties']['exposure_time']
         scan_info['images'] = expt['imageset'][e_block['imageset']]['template']
 
         scan_list.append(scan_info)
