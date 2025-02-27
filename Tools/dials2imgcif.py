@@ -415,6 +415,9 @@ def find_hdf5_images(master_path, dir):
     master = h5py.File(master_path, 'r')
     data_grp = master['/entry/data']
     for name in sorted(data_grp):
+        if not re.match(r'data_\d+$', name):
+            continue
+
         link = data_grp.get(name, getlink=True)
         dset = data_grp[name]
         if isinstance(link, h5py.ExternalLink):
