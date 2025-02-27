@@ -185,8 +185,8 @@ def get_two_theta(detector):
     if np.linalg.norm(p_onrm - [0,0,-1]) < 0.0001:
         return 0.0, None
 
-    rot_obj = R.align_vectors(np.array([0,0,-1]), p_onrm)
-    rot_vec = rot_obj[0].as_rotvec(degrees=True)
+    rot_obj, _ = R.align_vectors(np.array([0,0,-1]), p_onrm)
+    rot_vec = rot_obj.as_rotvec(degrees=True)
     tth_angl = np.linalg.norm(rot_vec)
     tth_axis = rot_vec / tth_angl
 
@@ -470,44 +470,47 @@ def write_axis_info(g_axes, d_axes, s_axes, fn):
         are both from the goniometer and the detector
     """
 
-    loop_header = """
-loop_
- _axis.id
- _axis.depends_on
- _axis.equipment
- _axis.type
- _axis.vector[1]
- _axis.vector[2]
- _axis.vector[3]
- _axis.offset[1]
- _axis.offset[2]
- _axis.offset[3]
+    primary_axis = list(g_axes.values())[0]['axis']
+    if abs(primary_axis[2]) > 0.0001:
+        raise ValueError("Primary axis had an unexpected z component")
 
-"""
+    if np.allclose(primary_axis, [1., 0., 0.]):
+        axis_rotation = R.identity()
+    else:
+        axis_rotation, _ = R.align_vectors([1., 0., 0.], primary_axis)
+        print("Rotating axis vectors with matrix:")
+        print(axis_rotation.as_matrix())
+        np.testing.assert_allclose(
+            axis_rotation.apply(primary_axis), [1., 0., 0.], atol=1e-8
+        )
+
+    fields = [
+        "id", "depends_on", "equipment", "type",
+        "vector[1]", "vector[2]", "vector[3]", "offset[1]", "offset[2]", "offset[3]",
+    ]
+    rows = []
+
+    for k, v in g_axes.items():
+        debug('Output axis now', k)
+        ax = axis_rotation.apply(v['axis']).round(8)
+        rows.append((k, v['next'], 'goniometer', 'rotation', ax[0], ax[1], ax[2], 0., 0., 0.))
+
+    # !!! Detector distance is currently not written - as well in the Julia reference
+    debug('Detector info', d_axes)
+    for k, v in d_axes.items():
+        debug('Output axis now', k)
+        ax = axis_rotation.apply(v['axis']).round(8)
+        rows.append((k, v['next'], 'detector', v['type'], ax[0], ax[1], ax[2], 0., 0., 0.))
+
+    for k, v in s_axes.items():
+        debug('Output surface axis', k)
+        ax = axis_rotation.apply(v['axis']).round(8)
+        origin = axis_rotation.apply(v['origin'])
+        rows.append((k, v['next'], 'detector', 'translation',
+                     ax[0], ax[1], ax[2], origin[0], origin[1], origin[2]))
+
     with open(fn, 'a') as outf:
-        outf.write(loop_header)
-
-        # round values
-        # tth = [round(x, digits = 6) for x in d_axes['Two_Theta']['axis']] # not used anywhere?
-
-        for k, v in g_axes.items():
-            debug('Output axis now', k)
-            outf.write(f"  {k:10}   {v['next']:10}  goniometer  rotation     {v['axis'][0]:8} {v['axis'][1]:8} {v['axis'][2]:8}")
-            outf.write("      0.0      0.0      0.0\n")
- 
-        # !!! Detector distance is currently not written - as well in the Julia reference
-        debug('Detector info', d_axes)
-        for k, v in d_axes.items():
-            debug('Output axis now', k)
-            outf.write(f"  {k:10}   {v['next']:10}  detector    {v['type']:11}  {v['axis'][0]:8} {v['axis'][1]:8} {v['axis'][2]:8}")
-            outf.write("      0.0      0.0      0.0\n")
- 
-        for k, v in s_axes.items():
-            debug('Output surface axis', k)
-            outf.write(f"  {k:10}   {v['next']:10}  detector    translation  {v['axis'][0]:8} {v['axis'][1]:8} {v['axis'][2]:8}")
-            outf.write(f" {v['origin'][0]:8} {v['origin'][1]:8} {v['origin'][2]:8}\n")
-
-        outf.write('\n')
+        outf.write(cif_loop("_axis", fields, rows))
 
 
 def write_array_info(det_name, n_elms, s_axes, d_axes, fn):
