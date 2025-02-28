@@ -470,7 +470,10 @@ def write_axis_info(g_axes, d_axes, s_axes, fn):
         are both from the goniometer and the detector
     """
 
-    primary_axis = list(g_axes.values())[0]['axis']
+    primary_gonio_axes = [v for v in g_axes.values() if v['next'] == '.']
+    if len(primary_gonio_axes) != 1:
+        raise AssertionError(f"{len(primary_gonio_axes)} != 1 primary goniometer axes")
+    primary_axis = primary_gonio_axes[0]['axis']
     if abs(primary_axis[2]) > 0.0001:
         raise ValueError("Primary axis had an unexpected z component")
 
