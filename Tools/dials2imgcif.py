@@ -516,7 +516,7 @@ def write_axis_info(g_axes, d_axes, s_axes, fn):
         outf.write(cif_loop("_axis", fields, rows))
 
 
-def write_array_info(det_name, n_elms, s_axes, d_axes, fn):
+def write_array_info(det_name, n_elms, s_axes, d_axes, fn, overload_value=None):
     """ Output information about the layout of the pixels. We assume two axes,
         with the first one the fast direction, and that there is no dead space
         between pixels.
@@ -527,17 +527,14 @@ def write_array_info(det_name, n_elms, s_axes, d_axes, fn):
         outf.write(f"""\
 _diffrn_detector.id        {det_name}
 _diffrn_detector.diffrn_id DIFFRN
-""")
-    
-        outf.write("""
-loop_
- _diffrn_detector_element.id
- _diffrn_detector_element.detector_id
 
 """)
-        for elm in range(n_elms):
-            outf.write(f'  ELEMENT{elm+1}    {det_name}\n')
-        outf.write('\n')
+
+        outf.write(cif_loop(
+            "_diffrn_detector_element",
+            ["id", "detector_id"],
+            [(f'ELEMENT{i}', det_name) for i in range(1, n_elms+1)]
+        ))
 
         outf.write(cif_loop(
             "_diffrn_detector_axis",
@@ -545,35 +542,23 @@ loop_
             [("DETECTOR", ax) for ax in d_axes]
         ))
 
-        outf.write("""
-loop_
- _array_structure_list_axis.axis_id
- _array_structure_list_axis.axis_set_id
- _array_structure_list_axis.displacement
- _array_structure_list_axis.displacement_increment
+        outf.write(cif_loop(
+            "_array_structure_list_axis",
+            ["axis_id", "axis_set_id", "displacement", "displacement_increment"],
+            [(ax, i, v['pix_size'] / 2, v['pix_size'])
+             for i, (ax, v) in enumerate(s_axes.items(), start=1)]
+        ))
 
-""")
+        outf.write(cif_loop(
+            "_array_structure_list",
+            ["array_id", "axis_set_id", "direction", "index", "precedence", "dimension"],
+            [(1, i, "increasing", v['prec'], v['prec'], v['num_pix'])
+             for i, v in enumerate(s_axes.values(), start=1)]
+        ))
 
-        set_no = 1
-        for axis, v in s_axes.items():
-            outf.write(f"  {axis}    {set_no}      {v['pix_size']/2}    {v['pix_size']}\n")
-            set_no += 1
+        if overload_value is not None:
+            outf.write(f"_array_intensities.overload    {overload_value}\n\n")
 
-        outf.write("""
-loop_
- _array_structure_list.array_id
- _array_structure_list.axis_set_id
- _array_structure_list.direction
- _array_structure_list.index
- _array_structure_list.precedence
- _array_structure_list.dimension
-
-""")
-        set_no = 1
-        for axis, v in s_axes.items():
-            outf.write(f"  1            {set_no}          increasing              {v['prec']} {v['prec']} {v['num_pix']}\n")
-            set_no += 1
-        outf.write('\n')
 
 
 def write_scan_info(scan_list, g_axes, d_axes, fn):
@@ -764,6 +749,10 @@ def parse_commandline(argv):
         "-z", "--archive-type",
         help = "Type of overall archive, should be of type listed in imgCIF dictionary"
     )
+    ap.add_argument(
+        '--overload-value',
+        help="Pixels with this value or above in the image data will be considered invalid"
+    )
     args = ap.parse_args(argv)
 
     return args
@@ -786,7 +775,7 @@ def main():
 
     write_array_info('DETECTOR',
                      len(expt['detector'][0]['panels']),
-                     s_ax, d_ax, out_fn)
+                     s_ax, d_ax, out_fn, args.overload_value)
 
     scans = get_scan_info(expt)
     write_scan_info(scans, g_ax, d_ax, out_fn)
