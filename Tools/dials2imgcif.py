@@ -16,6 +16,13 @@ import h5py
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+CIF_HEADER = """\
+#\\#CIF_2.0
+# CIF converted from DIALS .expt file
+# Conversion routine version 0.1
+data_{name}
+"""
+
 GONIO_DEFAULT_AXIS = 'Omega'  # Used when goniometer has 1 nameless axis
 
 #=== Utilities ===
@@ -432,24 +439,15 @@ def find_hdf5_images(master_path, dir):
 
 # ============ Output =============
 
-def cif_init(fn: Path):
-    cif_header = f"""#\\#CIF_2.0
-# CIF converted from DIALS .expt file
-# Conversion routine version 0.1
-data_{fn.stem}
-"""
-    with open(fn, 'w') as outf:
-        outf.write(cif_header)
 
-
-def write_beam_info(wl, fn):
+def write_beam_info(wl, outf):
     cif_block = f"""
 _diffrn_radiation_wavelength.id    1
 _diffrn_radiation_wavelength.value {wl}
 _diffrn_radiation.type             xray
+
 """
-    with open(fn, 'a') as outf:
-        outf.write(cif_block)
+    outf.write(cif_block)
 
 def cif_loop(base_name: str, fields: list, rows) -> str:
     """Assemble a loop_ table ready to be written to a CIF file"""
@@ -465,7 +463,7 @@ def cif_loop(base_name: str, fields: list, rows) -> str:
     ] + ["", ""]
     return "\n".join(lines)
 
-def write_axis_info(g_axes, d_axes, s_axes, fn):
+def write_axis_info(g_axes, d_axes, s_axes, outf):
     """ Write CIF syntax for all axes of the experiment, where axes
         are both from the goniometer and the detector
     """
@@ -512,159 +510,148 @@ def write_axis_info(g_axes, d_axes, s_axes, fn):
         rows.append((k, v['next'], 'detector', 'translation',
                      ax[0], ax[1], ax[2], origin[0], origin[1], origin[2]))
 
-    with open(fn, 'a') as outf:
-        outf.write(cif_loop("_axis", fields, rows))
+    outf.write(cif_loop("_axis", fields, rows))
 
 
-def write_array_info(det_name, n_elms, s_axes, d_axes, fn, overload_value=None):
+def write_array_info(det_name, n_elms, s_axes, d_axes, outf, overload_value=None):
     """ Output information about the layout of the pixels. We assume two axes,
         with the first one the fast direction, and that there is no dead space
         between pixels.
     """
-
-    with open(fn, 'a') as outf:
-
-        outf.write(f"""\
+    outf.write(f"""\
 _diffrn_detector.id        {det_name}
 _diffrn_detector.diffrn_id DIFFRN
 
 """)
 
-        outf.write(cif_loop(
-            "_diffrn_detector_element",
-            ["id", "detector_id"],
-            [(f'ELEMENT{i}', det_name) for i in range(1, n_elms+1)]
-        ))
+    outf.write(cif_loop(
+        "_diffrn_detector_element",
+        ["id", "detector_id"],
+        [(f'ELEMENT{i}', det_name) for i in range(1, n_elms+1)]
+    ))
 
-        outf.write(cif_loop(
-            "_diffrn_detector_axis",
-            ["detector_id", "axis_id"],
-            [("DETECTOR", ax) for ax in d_axes]
-        ))
+    outf.write(cif_loop(
+        "_diffrn_detector_axis",
+        ["detector_id", "axis_id"],
+        [("DETECTOR", ax) for ax in d_axes]
+    ))
 
-        outf.write(cif_loop(
-            "_array_structure_list_axis",
-            ["axis_id", "axis_set_id", "displacement", "displacement_increment"],
-            [(ax, i, v['pix_size'] / 2, v['pix_size'])
-             for i, (ax, v) in enumerate(s_axes.items(), start=1)]
-        ))
+    outf.write(cif_loop(
+        "_array_structure_list_axis",
+        ["axis_id", "axis_set_id", "displacement", "displacement_increment"],
+        [(ax, i, v['pix_size'] / 2, v['pix_size'])
+         for i, (ax, v) in enumerate(s_axes.items(), start=1)]
+    ))
 
-        outf.write(cif_loop(
-            "_array_structure_list",
-            ["array_id", "axis_set_id", "direction", "index", "precedence", "dimension"],
-            [(1, i, "increasing", v['prec'], v['prec'], v['num_pix'])
-             for i, v in enumerate(s_axes.values(), start=1)]
-        ))
+    outf.write(cif_loop(
+        "_array_structure_list",
+        ["array_id", "axis_set_id", "direction", "index", "precedence", "dimension"],
+        [(1, i, "increasing", v['prec'], v['prec'], v['num_pix'])
+         for i, v in enumerate(s_axes.values(), start=1)]
+    ))
 
-        if overload_value is not None:
-            outf.write(f"_array_intensities.overload    {overload_value}\n\n")
+    if overload_value is not None:
+        outf.write(f"_array_intensities.overload    {overload_value}\n\n")
 
 
 
-def write_scan_info(scan_list, g_axes, d_axes, fn):
+def write_scan_info(scan_list, g_axes, d_axes, outf):
     """ Output scan axis information 
     """
+    fields = [
+        "scan_id", "axis_id", "displacement_start", "displacement_increment",
+        "displacement_range", "angle_start", "angle_increment", "angle_range"
+    ]
+    rows = []
+    fmt = lambda v: format(v, '.2f')
 
-    loop_header = ("""\
-loop_
- _diffrn_scan_axis.scan_id
- _diffrn_scan_axis.axis_id
- _diffrn_scan_axis.displacement_start
- _diffrn_scan_axis.displacement_increment
- _diffrn_scan_axis.displacement_range
- _diffrn_scan_axis.angle_start
- _diffrn_scan_axis.angle_increment
- _diffrn_scan_axis.angle_range
+    for s_ix, scan in enumerate(scan_list):
 
-""")
-    
-    with open(fn, 'a') as outf:
+        scan_id = f'SCAN0{s_ix+1}'
 
-        outf.write(loop_header)
+        # get axis setting information
 
-        for s_ix, scan in enumerate(scan_list):
+        gi = scan['gonio_idx']
+        di = scan['det_idx']
 
-            scan_id = f'SCAN0{s_ix+1}'
-        
-            # get axis setting information
-        
-            gi = scan['gonio_idx']
-            di = scan['det_idx']
-        
-            for ax, v in g_axes.items():
-                if ax == scan['scan_axis']:
-                    outf.write(f"  {scan_id} {ax:10}       .       .       . {scan['start']:7.2f} {scan['step']:7.2f} {scan['range']:7.2f}\n")
-                else:
-                    outf.write(f"  {scan_id} {ax:10}       .       .       . {v['vals'][gi]:7.2f}       0       0\n")
+        for ax, v in g_axes.items():
+            if ax == scan['scan_axis']:
+                rows.append((
+                    scan_id, ax, ".", ".", ".", fmt(scan['start']), fmt(scan['step']), fmt(scan['range'])
+                ))
+            else:
+                rows.append((
+                    scan_id, ax, ".", ".", ".", fmt(v['vals'][gi]), 0., 0.
+                ))
 
-            for ax, v in d_axes.items():
-                if ax == "Trans":
-                    outf.write(f"  {scan_id} {ax:10} {v['vals'][di]:7.2f}     0.0     0.0       .       .       .\n")
-                else:
-                    outf.write(f"  {scan_id} {ax:10}       .       .       . {v['vals'][di]:7.2f}     0.0     0.0\n")
+        for ax, v in d_axes.items():
+            if ax == "Trans":
+                rows.append((
+                    scan_id, ax, fmt(v['vals'][di]), 0., 0., ".", ".", "."
+                ))
+            else:
+                rows.append((
+                    scan_id, ax, ".", ".", ".", fmt(v['vals'][di]), 0., 0.
+                ))
 
-            outf.write('\n')
+    outf.write(cif_loop("_diffrn_scan_axis", fields, rows))
 
-def write_frame_ids(scan_list, fn):
+def write_frame_ids(scan_list, outf):
+    rows = []
+    counter = 1
+    for s_ix, scan in enumerate(scan_list, start=1):
+        end_cnt = counter + scan['num_frames'] - 1
+        rows.append((f"SCAN{s_ix:02}", f"frm{counter}", f"frm{end_cnt}", scan['num_frames']))
+        counter = end_cnt + 1
 
-    with open(fn, 'a') as outf:
-        rows = []
-        counter = 1
-        for s_ix, scan in enumerate(scan_list, start=1):
-            end_cnt = counter + scan['num_frames'] - 1
-            rows.append((f"SCAN{s_ix:02}", f"frm{counter}", f"frm{end_cnt}", scan['num_frames']))
-            counter = end_cnt + 1
+    outf.write(cif_loop(
+        "_diffrn_scan",
+        ["id", "frame_id_start", "frame_id_end", "frames"],
+        rows
+    ))
 
-        outf.write(cif_loop(
-            "_diffrn_scan",
-            ["id", "frame_id_start", "frame_id_end", "frames"],
-            rows
-        ))
+    rows = []
+    counter = 1
+    for s_ix, scan in enumerate(scan_list, start=1):
+        for f_ix in range(scan['num_frames']):
+            exp_time = scan['integration_time']
+            rows.append((f"frm{counter}", f"SCAN{s_ix:02}", f_ix + 1, exp_time[f_ix]))
+            counter += 1
 
-        rows = []
-        counter = 1
-        for s_ix, scan in enumerate(scan_list, start=1):
-            for f_ix in range(scan['num_frames']):
-                exp_time = scan['integration_time']
-                rows.append((f"frm{counter}", f"SCAN{s_ix:02}", f_ix + 1, exp_time[f_ix]))
-                counter += 1
-
-        outf.write(cif_loop(
-            "_diffrn_scan_frame",
-            ["frame_id", "scan_id", "frame_number", "integration_time"],
-            rows
-        ))
+    outf.write(cif_loop(
+        "_diffrn_scan_frame",
+        ["frame_id", "scan_id", "frame_number", "integration_time"],
+        rows
+    ))
 
 
-def write_frame_images(scan_list, fn):
+def write_frame_images(scan_list, outf):
     """ Link frames to binary images
         TODO: Match array and element names
     """
-    
-    with open(fn, 'a') as outf:
-        rows = []
-        counter = 1
-        for scan in scan_list:
-            for _ in range(scan['num_frames']):
-                rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
-                counter += 1
+    rows = []
+    counter = 1
+    for scan in scan_list:
+        for _ in range(scan['num_frames']):
+            rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
+            counter += 1
 
-        outf.write(cif_loop(
-            "_diffrn_data_frame",
-            ["id", "detector_element_id", "array_id", "binary_id"],
-            rows
-        ))
-    
-        # Now link images with external locations
+    outf.write(cif_loop(
+        "_diffrn_data_frame",
+        ["id", "detector_element_id", "array_id", "binary_id"],
+        rows
+    ))
 
-        outf.write(cif_loop(
-            "_array_data",
-            ["array_id", "binary_id", "external_data_id"],
-            [("IMAGE", i, i) for i in range(1, counter)]
-        ))
+    # Now link images with external locations
+
+    outf.write(cif_loop(
+        "_array_data",
+        ["array_id", "binary_id", "external_data_id"],
+        [("IMAGE", i, i) for i in range(1, counter)]
+    ))
 
 
-def write_external_locations(ext_info, scans, fn):
+def write_external_locations(ext_info, scans, outf):
     """ External locations must be of uniform type, and organised in scan order.
     """
     fields = ['id', 'format', 'uri']
@@ -692,8 +679,7 @@ def write_external_locations(ext_info, scans, fn):
             rows.append(r)
             counter += 1
 
-    with open(fn, 'a') as outf:
-        outf.write(cif_loop("_array_data_external_data", fields, rows))
+    outf.write(cif_loop("_array_data_external_data", fields, rows))
 
 
 def encode_scan_step(template, val):
@@ -764,26 +750,27 @@ def main():
     if not out_fn.suffix:
         out_fn = out_fn.with_suffix('.cif')
 
-    cif_init(out_fn)
-    expt = extract_raw_info(args.input_fn)
+    with out_fn.open('w') as outf:
+        outf.write(CIF_HEADER.format(name=out_fn.stem))
+        expt = extract_raw_info(args.input_fn)
 
-    wl = get_beam_info(expt)
-    write_beam_info(wl, out_fn)
+        wl = get_beam_info(expt)
+        write_beam_info(wl, outf)
 
-    g_ax, d_ax, s_ax = get_axes_info(expt)
-    write_axis_info(g_ax, d_ax, s_ax, out_fn)
+        g_ax, d_ax, s_ax = get_axes_info(expt)
+        write_axis_info(g_ax, d_ax, s_ax, outf)
 
-    write_array_info('DETECTOR',
-                     len(expt['detector'][0]['panels']),
-                     s_ax, d_ax, out_fn, args.overload_value)
+        write_array_info('DETECTOR',
+                         len(expt['detector'][0]['panels']),
+                         s_ax, d_ax, outf, args.overload_value)
 
-    scans = get_scan_info(expt)
-    write_scan_info(scans, g_ax, d_ax, out_fn)
-    write_frame_ids(scans, out_fn)
-    write_frame_images(scans, out_fn)
+        scans = get_scan_info(expt)
+        write_scan_info(scans, g_ax, d_ax, outf)
+        write_frame_ids(scans, outf)
+        write_frame_images(scans, outf)
 
-    ext_info = gen_external_locations(scans, args)
-    write_external_locations(ext_info, scans, out_fn)
+        ext_info = gen_external_locations(scans, args)
+        write_external_locations(ext_info, scans, outf)
 
 
 if __name__ == '__main__':
