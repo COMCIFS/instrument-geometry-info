@@ -596,7 +596,7 @@ def write_scan_info(scan_list, g_axes, d_axes, outf):
 
     outf.write(cif_loop("_diffrn_scan_axis", fields, rows))
 
-def write_frame_ids(scan_list, outf):
+def write_frame_ids(scan_list, outf, scan_frame_limit=np.inf):
     rows = []
     counter = 1
     for s_ix, scan in enumerate(scan_list, start=1):
@@ -613,7 +613,7 @@ def write_frame_ids(scan_list, outf):
     rows = []
     counter = 1
     for s_ix, scan in enumerate(scan_list, start=1):
-        for f_ix in range(scan['num_frames']):
+        for f_ix in range(min(scan['num_frames'], scan_frame_limit)):
             exp_time = scan['integration_time']
             rows.append((f"frm{counter}", f"SCAN{s_ix:02}", f_ix + 1, exp_time[f_ix]))
             counter += 1
@@ -625,14 +625,14 @@ def write_frame_ids(scan_list, outf):
     ))
 
 
-def write_frame_images(scan_list, outf):
+def write_frame_images(scan_list, outf, scan_frame_limit=np.inf):
     """ Link frames to binary images
         TODO: Match array and element names
     """
     rows = []
     counter = 1
     for scan in scan_list:
-        for _ in range(scan['num_frames']):
+        for f_ix in range(min(scan['num_frames'], scan_frame_limit)):
             rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
             counter += 1
 
@@ -651,7 +651,7 @@ def write_frame_images(scan_list, outf):
     ))
 
 
-def write_external_locations(ext_info, scans, outf):
+def write_external_locations(ext_info, scans, outf, scan_frame_limit=np.inf):
     """ External locations must be of uniform type, and organised in scan order.
     """
     fields = ['id', 'format', 'uri']
@@ -663,7 +663,8 @@ def write_external_locations(ext_info, scans, outf):
     counter = 1
     rows = []
     for extf in ext_info:
-        for fr_ix in range(1, extf['num_frames'] + 1):
+        n_frames = min(extf['num_frames'], scan_frame_limit)
+        for fr_ix in range(1, n_frames + 1):
             r = [counter, extf['format']]
             if 'uri_template' in extf:
                 r += [encode_scan_step(extf['uri_template'], fr_ix)]
@@ -739,6 +740,12 @@ def parse_commandline(argv):
         '--overload-value',
         help="Pixels with this value or above in the image data will be considered invalid"
     )
+    ap.add_argument(
+        '--frames-limit', metavar='N', type=int,
+        help="Truncate lists to N frames (per scan), to get a preview output. "
+             "The result is incomplete, so remove this option again to generate "
+             "the full ImgCIF file."
+    )
     args = ap.parse_args(argv)
 
     return args
@@ -749,6 +756,8 @@ def main():
     out_fn = args.output_file
     if not out_fn.suffix:
         out_fn = out_fn.with_suffix('.cif')
+
+    frame_limit = np.inf if (args.frames_limit is None) else args.frames_limit
 
     with out_fn.open('w') as outf:
         outf.write(CIF_HEADER.format(name=out_fn.stem))
@@ -766,11 +775,11 @@ def main():
 
         scans = get_scan_info(expt)
         write_scan_info(scans, g_ax, d_ax, outf)
-        write_frame_ids(scans, outf)
-        write_frame_images(scans, outf)
+        write_frame_ids(scans, outf, frame_limit)
+        write_frame_images(scans, outf, frame_limit)
 
         ext_info = gen_external_locations(scans, args)
-        write_external_locations(ext_info, scans, outf)
+        write_external_locations(ext_info, scans, outf, frame_limit)
 
 
 if __name__ == '__main__':
