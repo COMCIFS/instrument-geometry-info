@@ -83,8 +83,29 @@ def get_beam_info(expt):
 
 def get_axes_info(expt):
     gon_axes = get_gon_axes(expt)
-    det_axes = get_det_axes(expt)
-    srf_axes = get_srf_axes(expt)
+
+    primary_gonio_axes = [v for v in gon_axes.values() if v['next'] == '.']
+    if len(primary_gonio_axes) != 1:
+        raise AssertionError(f"{len(primary_gonio_axes)} != 1 primary goniometer axes")
+    primary_axis = primary_gonio_axes[0]['axis']
+    if abs(primary_axis[2]) > 0.0001:
+        raise ValueError("Primary axis had an unexpected z component")
+
+    if np.allclose(primary_axis, [1., 0., 0.]):
+        axis_rotation = R.identity()
+    else:
+        axis_rotation, _ = R.align_vectors([1., 0., 0.], primary_axis)
+        print("Rotating axis vectors with matrix:")
+        print(axis_rotation.as_matrix())
+        np.testing.assert_allclose(
+            axis_rotation.apply(primary_axis), [1., 0., 0.], atol=1e-8
+        )
+
+    gon_axes = {k: v | {'axis': axis_rotation.apply(v['axis'])}
+                for k, v in gon_axes.items()}
+
+    det_axes = get_det_axes(expt, axis_rotation)
+    srf_axes = get_srf_axes(expt, axis_rotation)
     
     return gon_axes, det_axes, srf_axes
 
@@ -120,7 +141,7 @@ def get_gon_axes(expt):
     return axis_dict
 
 
-def get_det_axes(expt):
+def get_det_axes(expt, axis_rotation):
     """Determine the axes that move the detector.
        For axes describing pixel positions, see <def surface_axes>.
 
@@ -140,14 +161,14 @@ def get_det_axes(expt):
 
     # Sanity check 
     #panels = d_info[0]['panels']   # Not used anymore?
-    pp = find_perp_panel(d_info[0])
+    pp = find_perp_panel(d_info[0], axis_rotation)
     if pp is None:
         raise AssertionError('Unable to find a panel perpendicular to the beam at tth = 0')
 
     axis_dict = {}
 
     # two theta for each detector position
-    axis_info = [get_two_theta(det) for det in d_info]
+    axis_info = [get_two_theta(det, axis_rotation) for det in d_info]
 
     # Only a non-zero tth will give us the axis direction, else no tth required
     poss_axes = [x for x in axis_info if x[1] is not None]
@@ -172,17 +193,17 @@ def get_det_axes(expt):
     return axis_dict
 
 
-def get_two_theta(detector):
+def get_two_theta(detector, axis_rotation):
     """ Calculate the rotation required to make the normal to the module
         parallel to the beam. This assumes that the panel provided is
         perpendicular to the beam at tth = 0.
         <detector> is a single entry i.e. list element under key 'detector'.
     """
 
-    pp = find_perp_panel(detector)
+    pp = find_perp_panel(detector, axis_rotation)
 
     panel = detector['panels'][pp]
-    p_orth = np.cross(panel['fast_axis'], panel['slow_axis'])
+    p_orth = np.cross(axis_rotation.apply(panel['fast_axis']), axis_rotation.apply(panel['slow_axis']))
     p_onrm = p_orth / np.linalg.norm(p_orth)
     #debug('Normal to surface', p_onrm)
 
@@ -209,13 +230,13 @@ def get_distance(panel):
     return abs(np.dot(panel['origin'], p_onrm))
 
 
-def find_perp_panel(d_info):
+def find_perp_panel(d_info, axis_rotation):
     """ Find a panel with normal having x component 0
         Returns: the index of the first panel the meets the requirement
     """
 
     for i, p in enumerate(d_info['panels']):
-        p_orth = np.cross(p['fast_axis'], p['slow_axis'])
+        p_orth = np.cross(axis_rotation.apply(p['fast_axis']), axis_rotation.apply(p['slow_axis']))
         p_onrm = p_orth / np.linalg.norm(p_orth)
 
         if math.isclose(p_onrm[0], 0.0, abs_tol=0.0001):
@@ -225,7 +246,7 @@ def find_perp_panel(d_info):
     return None
 
 
-def get_srf_axes(expt):
+def get_srf_axes(expt, axis_rotation):
     """ Return the axis directions of each panel when tth = 0
     """
     
@@ -233,11 +254,11 @@ def get_srf_axes(expt):
 
     axis_dict = {}
     
-    tth_angl, tth_axis = get_two_theta(d_info)
+    tth_angl, tth_axis = get_two_theta(d_info, axis_rotation)
     for i, panel in enumerate(d_info['panels'], start=1):
-        fast = panel['fast_axis']
-        slow = panel['slow_axis']
-        origin = panel['origin']
+        fast = axis_rotation.apply(panel['fast_axis'])
+        slow = axis_rotation.apply(panel['slow_axis'])
+        origin = axis_rotation.apply(panel['origin'])
         
         if tth_axis is not None:
             # rotation matrix from 2theta angle-axis (reverse angle)
@@ -468,22 +489,7 @@ def write_axis_info(g_axes, d_axes, s_axes, outf):
         are both from the goniometer and the detector
     """
 
-    primary_gonio_axes = [v for v in g_axes.values() if v['next'] == '.']
-    if len(primary_gonio_axes) != 1:
-        raise AssertionError(f"{len(primary_gonio_axes)} != 1 primary goniometer axes")
-    primary_axis = primary_gonio_axes[0]['axis']
-    if abs(primary_axis[2]) > 0.0001:
-        raise ValueError("Primary axis had an unexpected z component")
 
-    if np.allclose(primary_axis, [1., 0., 0.]):
-        axis_rotation = R.identity()
-    else:
-        axis_rotation, _ = R.align_vectors([1., 0., 0.], primary_axis)
-        print("Rotating axis vectors with matrix:")
-        print(axis_rotation.as_matrix())
-        np.testing.assert_allclose(
-            axis_rotation.apply(primary_axis), [1., 0., 0.], atol=1e-8
-        )
 
     fields = [
         "id", "depends_on", "equipment", "type",
@@ -493,20 +499,20 @@ def write_axis_info(g_axes, d_axes, s_axes, outf):
 
     for k, v in g_axes.items():
         debug('Output axis now', k)
-        ax = axis_rotation.apply(v['axis']).round(8)
+        ax = np.array(v['axis']).round(8)
         rows.append((k, v['next'], 'goniometer', 'rotation', ax[0], ax[1], ax[2], 0., 0., 0.))
 
     # !!! Detector distance is currently not written - as well in the Julia reference
     debug('Detector info', d_axes)
     for k, v in d_axes.items():
         debug('Output axis now', k)
-        ax = axis_rotation.apply(v['axis']).round(8)
+        ax = np.array(v['axis']).round(8)
         rows.append((k, v['next'], 'detector', v['type'], ax[0], ax[1], ax[2], 0., 0., 0.))
 
     for k, v in s_axes.items():
         debug('Output surface axis', k)
-        ax = axis_rotation.apply(v['axis']).round(8)
-        origin = axis_rotation.apply(v['origin'])
+        ax = np.array(v['axis']).round(8)
+        origin = np.array(v['origin'])
         rows.append((k, v['next'], 'detector', 'translation',
                      ax[0], ax[1], ax[2], origin[0], origin[1], origin[2]))
 
