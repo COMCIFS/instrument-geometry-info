@@ -4,18 +4,17 @@ https://github.com/COMCIFS/instrument-geometry-info/blob/main/Tools/dials_expt_t
 Orignal author: Dr. James Hester, ANSTO, Lucas Heights, Australia 
 """
 
-import json
 import math
-import os
 import re
 import sys
 from argparse import ArgumentParser
 from pathlib import Path
+from typing import Optional
 
 import h5py
 import numpy as np
+from dxtbx.model import Detector, ExperimentList, MultiAxisGoniometer, Panel
 from dxtbx.model.experiment_list import ExperimentListFactory
-from dxtbx.model import MultiAxisGoniometer
 from scipy.spatial.transform import Rotation as R
 
 CIF_HEADER = """\
@@ -35,56 +34,10 @@ def debug(label, object):
     """
     print(f'DEBUG - {label}: {object}')
 
-
-def sanity_check(js_info):
-    """ Check for all the things that we assume
-    """
-
-    # Detector checks
-    
-    d_info = js_info['detector']
-
-    panel_count = [len(x['panels']) for x in d_info]
-    #debug('Panel numbers across detector entries', pc)
-    assert len(set(panel_count)) == 1
-
-    # Assume if names are the same, it is the same panel
-
-    for i in range(panel_count[0]):
-        panel_names = [x['panels'][i]['name'] for x in d_info]
-        assert len(set(panel_names)) == 1
-
-
-#=== Raw input parsing from JSON ===
-
-def extract_raw_info(filename):
-
-    if not os.path.exists(filename):
-        print(f'Could not open input file "{filename}": Aborting!')
-        sys.exit()
-
-    with open(filename, 'r') as f:
-        try:
-            expt_dict = json.load(f)
-            sanity_check(expt_dict)
-        except json.decoder.JSONDecodeError:
-            print('Could not recognize/decode/interpret JSON format.')
-
-    return expt_dict
-
-
-#=== Radiation ===
-
-def get_beam_info(expt):
-
-    wl = expt[0].beam.get_wavelength()
-
-    return wl
-
 #=== Geometry ===
 
-def get_axes_info(expt):
-    gon_axes = get_gon_axes(expt)
+def get_axes_info(expts: ExperimentList):
+    gon_axes = get_gon_axes(expts)
 
     primary_gonio_axes = [v for v in gon_axes.values() if v['next'] == '.']
     if len(primary_gonio_axes) != 1:
@@ -106,31 +59,36 @@ def get_axes_info(expt):
     gon_axes = {k: v | {'axis': axis_rotation.apply(v['axis'])}
                 for k, v in gon_axes.items()}
 
-    det_axes = get_det_axes(expt, axis_rotation)
-    srf_axes = get_srf_axes(expt, axis_rotation)
+    det_axes = get_det_axes(expts, axis_rotation)
+    srf_axes = get_srf_axes(expts, axis_rotation)
     
     return gon_axes, det_axes, srf_axes
 
 
-def get_gon_axes(expt):
+def get_gon_axes(expts: ExperimentList):
     """A goniometer in DIALS is a set of fixed axes, one of which rotates.
        If an axis changes direction, that is a new goniometer.
     """
 
-    gon0 = expt[0].goniometer
-    # g_info = expt['goniometer']
-    # g_dict = g_info[0]
-    #debug('axes in JSON dict', g_dict)
- 
+    gon0 = expts[0].goniometer
+
+
     axis_dict = {}
 
     if isinstance(gon0, MultiAxisGoniometer):
-        names = gon0.get_names()
+        names = list(gon0.get_names())
+
+        # Sanity check
+        for i, e in enumerate(expts[1:]):
+            assert isinstance(e.goniometer, MultiAxisGoniometer), "Goniometer type varies"
+            _names = list(e.goniometer.get_names())
+            assert _names == names, f"{_names} != {names} (expt {i})"
+
         n_axes = len(names)
         for i in range(n_axes):
             axis_dict[names[i]] = {
                 'axis': gon0.get_axes()[i],
-                'vals': [e.goniometer.get_angles()[i] for e in expt],
+                'vals': [e.goniometer.get_angles()[i] for e in expts],
                 'next': '.' if i == (n_axes - 1) else f'{names[i + 1]}'
             }
     else:  # single axis then
@@ -144,7 +102,7 @@ def get_gon_axes(expt):
     return axis_dict
 
 
-def get_det_axes(expt, axis_rotation):
+def get_det_axes(expts: ExperimentList, axis_rotation):
     """Determine the axes that move the detector.
        For axes describing pixel positions, see <def surface_axes>.
 
@@ -160,10 +118,9 @@ def get_det_axes(expt, axis_rotation):
        that is orthonormal to the beam
     """
 
-    d_info = expt[0].detector
+    d_info = expts[0].detector
 
     # Sanity check 
-    #panels = d_info[0]['panels']   # Not used anymore?
     pp = find_perp_panel(d_info, axis_rotation)
     if pp is None:
         raise AssertionError('Unable to find a panel perpendicular to the beam at tth = 0')
@@ -171,7 +128,7 @@ def get_det_axes(expt, axis_rotation):
     axis_dict = {}
 
     # two theta for each detector position
-    axis_info = [get_two_theta(e.detector, axis_rotation) for e in expt]
+    axis_info = [get_two_theta(e.detector, axis_rotation) for e in expts]
 
     # Only a non-zero tth will give us the axis direction, else no tth required
     poss_axes = [x for x in axis_info if x[1] is not None]
@@ -185,8 +142,8 @@ def get_det_axes(expt, axis_rotation):
             'type': 'rotation'
         }
     
-    dists = [get_distance(list(e.detector.iter_panels())[pp], axis_rotation)
-             for e in expt]
+    dists = [get_distance(e.detector[pp], axis_rotation)
+             for e in expts]
 
     axis_dict['Trans'] = {
         'axis': [0, 0, -1],
@@ -197,7 +154,7 @@ def get_det_axes(expt, axis_rotation):
     return axis_dict
 
 
-def get_two_theta(detector, axis_rotation):
+def get_two_theta(detector: Detector, axis_rotation):
     """ Calculate the rotation required to make the normal to the module
         parallel to the beam. This assumes that the panel provided is
         perpendicular to the beam at tth = 0.
@@ -206,7 +163,7 @@ def get_two_theta(detector, axis_rotation):
 
     pp = find_perp_panel(detector, axis_rotation)
 
-    panel = list(detector.iter_panels())[pp]
+    panel = detector[pp]
     p_orth = np.cross(
         axis_rotation.apply(panel.get_fast_axis()),
         axis_rotation.apply(panel.get_slow_axis())
@@ -228,7 +185,7 @@ def get_two_theta(detector, axis_rotation):
     return tth_angl, tth_axis
 
 
-def get_distance(panel, axis_rotation):
+def get_distance(panel: Panel, axis_rotation):
 
     # Get projection of a pixel vector onto the normal to the panel
 
@@ -241,12 +198,12 @@ def get_distance(panel, axis_rotation):
     return abs(np.dot(origin, p_onrm))
 
 
-def find_perp_panel(d_info, axis_rotation):
+def find_perp_panel(d_info: Detector, axis_rotation):
     """ Find a panel with normal having x component 0
         Returns: the index of the first panel the meets the requirement
     """
 
-    for i, p in enumerate(d_info.iter_panels()):
+    for i, p in enumerate(d_info):
         p_orth = np.cross(
             axis_rotation.apply(p.get_fast_axis()),
             axis_rotation.apply(p.get_slow_axis())
@@ -260,16 +217,22 @@ def find_perp_panel(d_info, axis_rotation):
     return None
 
 
-def get_srf_axes(expt, axis_rotation):
+def get_srf_axes(expts: ExperimentList, axis_rotation):
     """ Return the axis directions of each panel when tth = 0
     """
     
-    d_info = expt[0].detector
+    d_info = expts[0].detector
+    panel_names = [p.get_name() for p in d_info]
+
+    # Sanity check
+    for i, e in enumerate(expts[1:], start=1):
+        _panel_names = [p.get_name() for p in e.detector]
+        assert _panel_names == panel_names, f"{_panel_names} != {panel_names} (expt {i})"
 
     axis_dict = {}
     
     tth_angl, tth_axis = get_two_theta(d_info, axis_rotation)
-    for i, panel in enumerate(d_info.iter_panels(), start=1):
+    for i, panel in enumerate(d_info, start=1):
         fast = axis_rotation.apply(panel.get_fast_axis())
         slow = axis_rotation.apply(panel.get_slow_axis())
         origin = axis_rotation.apply(panel.get_origin())
@@ -318,58 +281,19 @@ def get_srf_axes(expt, axis_rotation):
     for each scan, with the order of appearance corresponding to
     the order they appear in `goniometer` or `detector`
 """
-def get_scan_info(expt):
-    """ Returns: list of dictionaries for each scan
-    """
-    scan_list = []
-
-    for s_ix, e_block in enumerate(expt):
-
-        scan_id = f'SCAN0{s_ix+1}'
-        debug('Scan ID', scan_id)  # actually not used further within this function
-
-        scan_info = {}
-
-        # gonio = expt['goniometer'][e_block['goniometer']] # gonio info that the index in scan info points to
-        if isinstance(e_block.goniometer, MultiAxisGoniometer):
-            gonio_names = e_block.goniometer.get_names()
-            scan_ax = gonio_names[e_block.goniometer.get_scan_axis()]
-        else:
-            scan_ax = GONIO_DEFAULT_AXIS
-
-        # get scan information
-
-        # s_block = expt['scan'][e_block['scan']]
-        exposure_times = e_block.scan.get_exposure_times()
-        num_frames = len(exposure_times)
-        start, step = e_block.scan.get_oscillation()
-        full_range = step * num_frames # to end of final step
-
-        # Store
-
-        scan_info['scan_axis'] = scan_ax
-        scan_info['start'] = start
-        scan_info['step'] = step
-        scan_info['range'] = full_range
-        scan_info['num_frames'] = num_frames
-        scan_info['integration_time'] = exposure_times
-        scan_info['images'] = e_block.imageset.get_template()
-
-        scan_list.append(scan_info)
-    
-    return scan_list 
 
 # === Derived information to prepare external links ===
 
-def gen_external_locations(scan_list, args):
+def gen_external_locations(expts: ExperimentList, args):
     """ Based on command-line arguments and the scan information collected
         at this point, we create per-scan information to be written out as
         external file links later.
         Returns: a list of image file info dictionaries per scan
     """
 
-    n_scans = len(scan_list)
-    url_bases = urls = None
+    n_scans = len(expts)
+    url_bases: Optional[list[str]] = None
+    urls: Optional[list[str]] = None
     if args.url_base:
         if len(args.url_base) == 1:
             url_bases = args.url_base * n_scans
@@ -389,38 +313,37 @@ def gen_external_locations(scan_list, args):
     else:
         raise ValueError("--url or --url-base is required")
 
+    def download_fields(rel_path, scan_ix):
+        if url_bases is not None:
+            ub = url_bases[scan_ix]
+            return {'uri_template': ub.rstrip('/') + '/' + str(rel_path)}
+        else:
+            url = urls[scan_ix]
+            arch_fmt = args.archive_type or guess_archive_type(url)
+            return {'uri': url, 'archive_format': arch_fmt,
+                    'archive_path_template': str(rel_path)}
+
     ext_info = []
 
-    for (s_ix, expt) in enumerate(scan_list):
-        local_name = Path(expt['images']) # complete local path as in expt
+    for (s_ix, expt) in enumerate(expts):
+        local_name = Path(expt.imageset.get_template()) # complete local path as in expt
         template_rel_path = local_name.relative_to(args.dir)
-
         fmt = args.format or guess_file_type(template_rel_path.name)
+
+        n_frames = expt.scan.get_num_images()
 
         if fmt == 'HDF5':
             total_n_frames = 0
             for file_rel_path, obj_path, n in find_hdf5_images(local_name, args.dir):
-                d = {'format': fmt, 'num_frames': n, 'path': obj_path}
-                if url_bases is not None:
-                    ub = url_bases[s_ix]
-                    d['uri_template'] = ub.rstrip('/') + '/' + str(file_rel_path)
-                else:
-                    d['uri'] = url = urls[s_ix]
-                    d['archive_format'] = args.archive_type or guess_archive_type(url)
-                    d['archive_path_template'] = str(file_rel_path)
-                total_n_frames += n
+                d = {'format': fmt, 'num_frames': n, 'path': obj_path} \
+                    | download_fields(file_rel_path, s_ix)
                 ext_info.append(d)
+                total_n_frames += n
                 print(f"{n} images in file {file_rel_path}")
-            assert total_n_frames == expt['num_frames']
+            assert total_n_frames == n_frames, f"{total_n_frames} != {n_frames}"
         else:
-            d = {'format': fmt, 'num_frames': expt['num_frames']}
-            if url_bases is not None:
-                ub = url_bases[s_ix]
-                d['uri_template'] = ub.rstrip('/') + '/' + str(template_rel_path)
-            else:
-                d['uri'] = url = urls[s_ix]
-                d['archive_format'] = args.archive_type or guess_archive_type(url)
-                d['archive_path_template'] = str(template_rel_path)
+            d = {'format': fmt, 'num_frames': n_frames} \
+                | download_fields(template_rel_path, s_ix)
             ext_info.append(d)
             debug('External name dictionary', d)
 
@@ -473,7 +396,11 @@ def find_hdf5_images(master_path, dir):
 # ============ Output =============
 
 
-def write_beam_info(wl, outf):
+def write_beam_info(expts: ExperimentList, outf):
+    wl = expts[0].beam.get_wavelength()
+    for e in expts[1:]:
+        assert e.beam.get_wavelength() == wl, f"{e.beam.get_wavelength()} != {wl}"
+
     cif_block = f"""
 _diffrn_radiation_wavelength.id    1
 _diffrn_radiation_wavelength.value {wl}
@@ -573,7 +500,7 @@ _diffrn_detector.diffrn_id DIFFRN
 
 
 
-def write_scan_info(scan_list, g_axes, d_axes, outf):
+def write_scan_info(expts: ExperimentList, g_axes, d_axes, outf):
     """ Output scan axis information 
     """
     fields = [
@@ -583,16 +510,23 @@ def write_scan_info(scan_list, g_axes, d_axes, outf):
     rows = []
     fmt = lambda v: format(v, '.2f')
 
-    for s_ix, scan in enumerate(scan_list):
+    for s_ix, expt in enumerate(expts):
 
         scan_id = f'SCAN0{s_ix+1}'
 
-        # get axis setting information
+        if isinstance(expt.goniometer, MultiAxisGoniometer):
+            gonio_names = expt.goniometer.get_names()
+            scan_ax = gonio_names[expt.goniometer.get_scan_axis()]
+        else:
+            scan_ax = GONIO_DEFAULT_AXIS
+
+        start, step = expt.scan.get_oscillation()
+        full_range = step * expt.scan.get_num_images() # to end of final step
 
         for ax, v in g_axes.items():
-            if ax == scan['scan_axis']:
+            if ax == scan_ax:
                 rows.append((
-                    scan_id, ax, ".", ".", ".", fmt(scan['start']), fmt(scan['step']), fmt(scan['range'])
+                    scan_id, ax, ".", ".", ".", fmt(start), fmt(step), fmt(full_range)
                 ))
             else:
                 rows.append((
@@ -611,12 +545,13 @@ def write_scan_info(scan_list, g_axes, d_axes, outf):
 
     outf.write(cif_loop("_diffrn_scan_axis", fields, rows))
 
-def write_frame_ids(scan_list, outf, scan_frame_limit=np.inf):
+def write_frame_ids(expts: ExperimentList, outf, scan_frame_limit=np.inf):
     rows = []
     counter = 1
-    for s_ix, scan in enumerate(scan_list, start=1):
-        end_cnt = counter + scan['num_frames'] - 1
-        rows.append((f"SCAN{s_ix:02}", f"frm{counter}", f"frm{end_cnt}", scan['num_frames']))
+    for s_ix, expt in enumerate(expts, start=1):
+        n_frames = expt.scan.get_num_images()
+        end_cnt = counter + n_frames - 1
+        rows.append((f"SCAN{s_ix:02}", f"frm{counter}", f"frm{end_cnt}", n_frames))
         counter = end_cnt + 1
 
     outf.write(cif_loop(
@@ -627,9 +562,9 @@ def write_frame_ids(scan_list, outf, scan_frame_limit=np.inf):
 
     rows = []
     counter = 1
-    for s_ix, scan in enumerate(scan_list, start=1):
-        for f_ix in range(min(scan['num_frames'], scan_frame_limit)):
-            exp_time = scan['integration_time']
+    for s_ix, expt in enumerate(expts, start=1):
+        exp_time = expt.scan.get_exposure_times()
+        for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
             rows.append((f"frm{counter}", f"SCAN{s_ix:02}", f_ix + 1, exp_time[f_ix]))
             counter += 1
 
@@ -640,14 +575,14 @@ def write_frame_ids(scan_list, outf, scan_frame_limit=np.inf):
     ))
 
 
-def write_frame_images(scan_list, outf, scan_frame_limit=np.inf):
+def write_frame_images(expts: ExperimentList, outf, scan_frame_limit=np.inf):
     """ Link frames to binary images
         TODO: Match array and element names
     """
     rows = []
     counter = 1
-    for scan in scan_list:
-        for f_ix in range(min(scan['num_frames'], scan_frame_limit)):
+    for expt in expts:
+        for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
             rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
             counter += 1
 
@@ -666,7 +601,7 @@ def write_frame_images(scan_list, outf, scan_frame_limit=np.inf):
     ))
 
 
-def write_external_locations(ext_info, scans, outf, scan_frame_limit=np.inf):
+def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
     """ External locations must be of uniform type, and organised in scan order.
     """
     fields = ['id', 'format', 'uri']
@@ -776,11 +711,9 @@ def main():
 
     with out_fn.open('w') as outf:
         outf.write(CIF_HEADER.format(name=out_fn.stem))
-        #expt = extract_raw_info(args.input_fn)
         expts = ExperimentListFactory.from_json_file(args.input_fn)
 
-        wl = get_beam_info(expts)
-        write_beam_info(wl, outf)
+        write_beam_info(expts, outf)
 
         g_ax, d_ax, s_ax = get_axes_info(expts)
         write_axis_info(g_ax, d_ax, s_ax, outf)
@@ -789,13 +722,12 @@ def main():
                          len(list(expts[0].detector.iter_panels())),
                          s_ax, d_ax, outf, args.overload_value)
 
-        scans = get_scan_info(expts)
-        write_scan_info(scans, g_ax, d_ax, outf)
-        write_frame_ids(scans, outf, frame_limit)
-        write_frame_images(scans, outf, frame_limit)
+        write_scan_info(expts, g_ax, d_ax, outf)
+        write_frame_ids(expts, outf, frame_limit)
+        write_frame_images(expts, outf, frame_limit)
 
-        ext_info = gen_external_locations(scans, args)
-        write_external_locations(ext_info, scans, outf, frame_limit)
+        ext_info = gen_external_locations(expts, args)
+        write_external_locations(ext_info, outf, frame_limit)
 
 
 if __name__ == '__main__':
