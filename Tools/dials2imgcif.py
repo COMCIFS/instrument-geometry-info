@@ -14,6 +14,8 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+from dxtbx.model.experiment_list import ExperimentListFactory
+from dxtbx.model import MultiAxisGoniometer
 from scipy.spatial.transform import Rotation as R
 
 CIF_HEADER = """\
@@ -75,7 +77,7 @@ def extract_raw_info(filename):
 
 def get_beam_info(expt):
 
-    wl = expt['beam'][0]['wavelength']
+    wl = expt[0].beam.get_wavelength()
 
     return wl
 
@@ -94,7 +96,7 @@ def get_axes_info(expt):
     if np.allclose(primary_axis, [1., 0., 0.]):
         axis_rotation = R.identity()
     else:
-        axis_rotation, _ = R.align_vectors([1., 0., 0.], primary_axis)
+        axis_rotation, *_ = R.align_vectors([1., 0., 0.], primary_axis)
         print("Rotating axis vectors with matrix:")
         print(axis_rotation.as_matrix())
         np.testing.assert_allclose(
@@ -115,29 +117,30 @@ def get_gon_axes(expt):
        If an axis changes direction, that is a new goniometer.
     """
 
-    g_info = expt['goniometer']
-    g_dict = g_info[0]
-    debug('axes in JSON dict', g_dict)
+    gon0 = expt[0].goniometer
+    # g_info = expt['goniometer']
+    # g_dict = g_info[0]
+    #debug('axes in JSON dict', g_dict)
  
     axis_dict = {}
 
-    if 'names' not in g_dict:  # single axis then
-        assert(len(g_info) == 1)
+    if isinstance(gon0, MultiAxisGoniometer):
+        names = gon0.get_names()
+        n_axes = len(names)
+        for i in range(n_axes):
+            axis_dict[names[i]] = {
+                'axis': gon0.get_axes()[i],
+                'vals': [e.goniometer.get_angles()[i] for e in expt],
+                'next': '.' if i == (n_axes - 1) else f'{names[i + 1]}'
+            }
+    else:  # single axis then
+        #assert(len(g_info) == 1)
         axis_dict[GONIO_DEFAULT_AXIS] = {
-            'axis': g_dict['rotation_axis'],
+            'axis': gon0.get_rotation_axis(),  #g_dict['rotation_axis'],
             'next': '.',
         }
-        
-    else:
-        n_axes = len(g_dict['names'])
-        for i in range(n_axes):
-            axis_dict[g_dict['names'][i]] = {
-                'axis': g_dict['axes'][i],
-                'vals': [x['angles'][i] for x in g_info],
-                'next': '.' if i == (n_axes-1) else f'{g_dict["names"][i+1]}'
-            }
+
     debug('axes in processed dict', axis_dict)
-    
     return axis_dict
 
 
@@ -157,18 +160,18 @@ def get_det_axes(expt, axis_rotation):
        that is orthonormal to the beam
     """
 
-    d_info = expt['detector']
+    d_info = expt[0].detector
 
     # Sanity check 
     #panels = d_info[0]['panels']   # Not used anymore?
-    pp = find_perp_panel(d_info[0], axis_rotation)
+    pp = find_perp_panel(d_info, axis_rotation)
     if pp is None:
         raise AssertionError('Unable to find a panel perpendicular to the beam at tth = 0')
 
     axis_dict = {}
 
     # two theta for each detector position
-    axis_info = [get_two_theta(det, axis_rotation) for det in d_info]
+    axis_info = [get_two_theta(e.detector, axis_rotation) for e in expt]
 
     # Only a non-zero tth will give us the axis direction, else no tth required
     poss_axes = [x for x in axis_info if x[1] is not None]
@@ -182,7 +185,8 @@ def get_det_axes(expt, axis_rotation):
             'type': 'rotation'
         }
     
-    dists = [get_distance(x['panels'][pp]) for x in d_info]
+    dists = [get_distance(list(e.detector.iter_panels())[pp], axis_rotation)
+             for e in expt]
 
     axis_dict['Trans'] = {
         'axis': [0, 0, -1],
@@ -202,8 +206,11 @@ def get_two_theta(detector, axis_rotation):
 
     pp = find_perp_panel(detector, axis_rotation)
 
-    panel = detector['panels'][pp]
-    p_orth = np.cross(axis_rotation.apply(panel['fast_axis']), axis_rotation.apply(panel['slow_axis']))
+    panel = list(detector.iter_panels())[pp]
+    p_orth = np.cross(
+        axis_rotation.apply(panel.get_fast_axis()),
+        axis_rotation.apply(panel.get_slow_axis())
+    )
     p_onrm = p_orth / np.linalg.norm(p_orth)
     #debug('Normal to surface', p_onrm)
 
@@ -213,7 +220,7 @@ def get_two_theta(detector, axis_rotation):
     if np.linalg.norm(p_onrm - [0,0,-1]) < 0.0001:
         return 0.0, None
 
-    rot_obj, _ = R.align_vectors(np.array([0,0,-1]), p_onrm)
+    rot_obj, *_ = R.align_vectors(np.array([0,0,-1]), p_onrm)
     rot_vec = rot_obj.as_rotvec(degrees=True)
     tth_angl = np.linalg.norm(rot_vec)
     tth_axis = rot_vec / tth_angl
@@ -221,13 +228,17 @@ def get_two_theta(detector, axis_rotation):
     return tth_angl, tth_axis
 
 
-def get_distance(panel):
+def get_distance(panel, axis_rotation):
 
     # Get projection of a pixel vector onto the normal to the panel
 
-    p_orth = np.cross(panel['fast_axis'], panel['slow_axis'])
+    p_orth = np.cross(
+        axis_rotation.apply(panel.get_fast_axis()),
+        axis_rotation.apply(panel.get_slow_axis())
+    )
     p_onrm = p_orth / np.linalg.norm(p_orth)
-    return abs(np.dot(panel['origin'], p_onrm))
+    origin = axis_rotation.apply(panel.get_origin())
+    return abs(np.dot(origin, p_onrm))
 
 
 def find_perp_panel(d_info, axis_rotation):
@@ -235,8 +246,11 @@ def find_perp_panel(d_info, axis_rotation):
         Returns: the index of the first panel the meets the requirement
     """
 
-    for i, p in enumerate(d_info['panels']):
-        p_orth = np.cross(axis_rotation.apply(p['fast_axis']), axis_rotation.apply(p['slow_axis']))
+    for i, p in enumerate(d_info.iter_panels()):
+        p_orth = np.cross(
+            axis_rotation.apply(p.get_fast_axis()),
+            axis_rotation.apply(p.get_slow_axis())
+        )
         p_onrm = p_orth / np.linalg.norm(p_orth)
 
         if math.isclose(p_onrm[0], 0.0, abs_tol=0.0001):
@@ -250,15 +264,15 @@ def get_srf_axes(expt, axis_rotation):
     """ Return the axis directions of each panel when tth = 0
     """
     
-    d_info = expt['detector'][0]
+    d_info = expt[0].detector
 
     axis_dict = {}
     
     tth_angl, tth_axis = get_two_theta(d_info, axis_rotation)
-    for i, panel in enumerate(d_info['panels'], start=1):
-        fast = axis_rotation.apply(panel['fast_axis'])
-        slow = axis_rotation.apply(panel['slow_axis'])
-        origin = axis_rotation.apply(panel['origin'])
+    for i, panel in enumerate(d_info.iter_panels(), start=1):
+        fast = axis_rotation.apply(panel.get_fast_axis())
+        slow = axis_rotation.apply(panel.get_slow_axis())
+        origin = axis_rotation.apply(panel.get_origin())
         
         if tth_axis is not None:
             # rotation matrix from 2theta angle-axis (reverse angle)
@@ -274,16 +288,16 @@ def get_srf_axes(expt, axis_rotation):
         axis_dict[f'ele{i}_x'] = { 'axis': fast,
                                    'next': "Trans",
                                    'origin': origin,
-                                   'pix_size': panel['pixel_size'][0],
-                                   'num_pix': panel['image_size'][0],
+                                   'pix_size': panel.get_pixel_size()[0],
+                                   'num_pix': panel.get_image_size()[0],
                                    'prec': 1,
                                    'element': i
         }
         axis_dict[f'ele{i}_y'] = { 'axis': slow,
                                    'next': f'ele{i}_x',
                                    'origin': [0.0, 0.0, 0.0],
-                                   'pix_size': panel['pixel_size'][1],
-                                   'num_pix': panel['image_size'][1],
+                                   'pix_size': panel.get_pixel_size()[1],
+                                   'num_pix': panel.get_image_size()[1],
                                    'prec': 2,
                                    'element': i
         }
@@ -309,26 +323,26 @@ def get_scan_info(expt):
     """
     scan_list = []
 
-    for s_ix, e_block in enumerate(expt['experiment']):
+    for s_ix, e_block in enumerate(expt):
 
         scan_id = f'SCAN0{s_ix+1}'
         debug('Scan ID', scan_id)  # actually not used further within this function
 
         scan_info = {}
 
-        gonio = expt['goniometer'][e_block['goniometer']] # gonio info that the index in scan info points to
-        if 'names' in gonio:
-            scan_ax = gonio['names'][gonio['scan_axis']]
+        # gonio = expt['goniometer'][e_block['goniometer']] # gonio info that the index in scan info points to
+        if isinstance(e_block.goniometer, MultiAxisGoniometer):
+            gonio_names = e_block.goniometer.get_names()
+            scan_ax = gonio_names[e_block.goniometer.get_scan_axis()]
         else:
             scan_ax = GONIO_DEFAULT_AXIS
 
         # get scan information
 
-        s_block = expt['scan'][e_block['scan']]
-        num_frames = len(s_block['properties']['exposure_time'])
-        start = s_block['properties']['oscillation'][0]
-        final = s_block['properties']['oscillation'][-1]
-        step = (final - start) / (num_frames - 1)
+        # s_block = expt['scan'][e_block['scan']]
+        exposure_times = e_block.scan.get_exposure_times()
+        num_frames = len(exposure_times)
+        start, step = e_block.scan.get_oscillation()
         full_range = step * num_frames # to end of final step
 
         # Store
@@ -337,11 +351,9 @@ def get_scan_info(expt):
         scan_info['start'] = start
         scan_info['step'] = step
         scan_info['range'] = full_range
-        scan_info['gonio_idx'] = e_block['goniometer']
-        scan_info['det_idx'] = e_block['detector']
         scan_info['num_frames'] = num_frames
-        scan_info['integration_time'] = s_block['properties']['exposure_time']
-        scan_info['images'] = expt['imageset'][e_block['imageset']]['template']
+        scan_info['integration_time'] = exposure_times
+        scan_info['images'] = e_block.imageset.get_template()
 
         scan_list.append(scan_info)
     
@@ -577,9 +589,6 @@ def write_scan_info(scan_list, g_axes, d_axes, outf):
 
         # get axis setting information
 
-        gi = scan['gonio_idx']
-        di = scan['det_idx']
-
         for ax, v in g_axes.items():
             if ax == scan['scan_axis']:
                 rows.append((
@@ -587,17 +596,17 @@ def write_scan_info(scan_list, g_axes, d_axes, outf):
                 ))
             else:
                 rows.append((
-                    scan_id, ax, ".", ".", ".", fmt(v['vals'][gi]), 0., 0.
+                    scan_id, ax, ".", ".", ".", fmt(v['vals'][s_ix]), 0., 0.
                 ))
 
         for ax, v in d_axes.items():
             if ax == "Trans":
                 rows.append((
-                    scan_id, ax, fmt(v['vals'][di]), 0., 0., ".", ".", "."
+                    scan_id, ax, fmt(v['vals'][s_ix]), 0., 0., ".", ".", "."
                 ))
             else:
                 rows.append((
-                    scan_id, ax, ".", ".", ".", fmt(v['vals'][di]), 0., 0.
+                    scan_id, ax, ".", ".", ".", fmt(v['vals'][s_ix]), 0., 0.
                 ))
 
     outf.write(cif_loop("_diffrn_scan_axis", fields, rows))
@@ -767,19 +776,20 @@ def main():
 
     with out_fn.open('w') as outf:
         outf.write(CIF_HEADER.format(name=out_fn.stem))
-        expt = extract_raw_info(args.input_fn)
+        #expt = extract_raw_info(args.input_fn)
+        expts = ExperimentListFactory.from_json_file(args.input_fn)
 
-        wl = get_beam_info(expt)
+        wl = get_beam_info(expts)
         write_beam_info(wl, outf)
 
-        g_ax, d_ax, s_ax = get_axes_info(expt)
+        g_ax, d_ax, s_ax = get_axes_info(expts)
         write_axis_info(g_ax, d_ax, s_ax, outf)
 
         write_array_info('DETECTOR',
-                         len(expt['detector'][0]['panels']),
+                         len(list(expts[0].detector.iter_panels())),
                          s_ax, d_ax, outf, args.overload_value)
 
-        scans = get_scan_info(expt)
+        scans = get_scan_info(expts)
         write_scan_info(scans, g_ax, d_ax, outf)
         write_frame_ids(scans, outf, frame_limit)
         write_frame_images(scans, outf, frame_limit)
