@@ -97,6 +97,9 @@ def get_axes_info(expt):
         axis_rotation, _ = R.align_vectors([1., 0., 0.], primary_axis)
         print("Rotating axis vectors with matrix:")
         print(axis_rotation.as_matrix())
+        rotvec = axis_rotation.as_rotvec(degrees=True)
+        rot_angle = np.linalg.norm(rotvec)
+        print(f"Equivalent to {rot_angle:.3f} degrees rotation around {rotvec / rot_angle}")
         np.testing.assert_allclose(
             axis_rotation.apply(primary_axis), [1., 0., 0.], atol=1e-8
         )
