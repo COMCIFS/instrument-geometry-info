@@ -696,6 +696,11 @@ def parse_commandline(argv):
              "The result is incomplete, so remove this option again to generate "
              "the full ImgCIF file."
     )
+    ap.add_argument(
+        '--no-check-format', action='store_true',
+        help="Skip dxtbx checking the data file format. Needed if you don't have the "
+             "data files which a DIALS .expt file points to."
+    )
     args = ap.parse_args(argv)
 
     return args
@@ -711,7 +716,9 @@ def main():
 
     with out_fn.open('w') as outf:
         outf.write(CIF_HEADER.format(name=out_fn.stem))
-        expts = ExperimentListFactory.from_json_file(args.input_fn)
+        expts = ExperimentListFactory.from_json_file(
+            args.input_fn, check_format=(not args.no_check_format)
+        )
 
         write_beam_info(expts, outf)
 
