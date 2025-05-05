@@ -658,6 +658,7 @@ def parse_commandline(argv):
     ap.add_argument(
         "input_fn",
         type=Path,
+        nargs='+',
         help="Experiment description in JSON format as produced by DIALS "
              "(typically '<input_fn>.expt') "
     )
@@ -721,9 +722,16 @@ def main():
 
     with out_fn.open('w') as outf:
         outf.write(CIF_HEADER.format(name=out_fn.stem))
-        expts = ExperimentListFactory.from_json_file(
-            args.input_fn, check_format=(not args.no_check_format)
-        )
+
+        if args.input_fn[0].suffix == '.expt':
+            assert len(args.input_fn) == 1, "Please pass only 1 .expt file"
+            expts = ExperimentListFactory.from_json_file(
+                args.input_fn[0], check_format=(not args.no_check_format)
+            )
+        else:
+            print(f"Attempting to parse {len(args.input_fn)} paths using dxtbx")
+            expts = ExperimentListFactory.from_filenames(args.input_fn)
+            print(f"Read {len(expts)} experiments")
 
         write_beam_info(expts, outf)
 
