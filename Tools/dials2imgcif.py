@@ -251,21 +251,23 @@ def get_srf_axes(expts: ExperimentList, axis_rotation):
 
         origin = [origin[0], origin[1], 0.0]   # z component is distance
         
-        axis_dict[f'ele{i}_x'] = { 'axis': fast,
-                                   'next': "Trans",
-                                   'origin': origin,
-                                   'pix_size': panel.get_pixel_size()[0],
-                                   'num_pix': panel.get_image_size()[0],
-                                   'prec': 1,
-                                   'element': i
+        axis_dict[f'ele{i}_fast'] = {
+            'axis': fast,
+            'next': "Trans",
+            'origin': origin,
+            'pix_size': panel.get_pixel_size()[0],
+            'num_pix': panel.get_image_size()[0],
+            'prec': 1,
+            'element': i
         }
-        axis_dict[f'ele{i}_y'] = { 'axis': slow,
-                                   'next': f'ele{i}_x',
-                                   'origin': [0.0, 0.0, 0.0],
-                                   'pix_size': panel.get_pixel_size()[1],
-                                   'num_pix': panel.get_image_size()[1],
-                                   'prec': 2,
-                                   'element': i
+        axis_dict[f'ele{i}_slow'] = {
+            'axis': slow,
+            'next': f'ele{i}_fast',
+            'origin': [0.0, 0.0, 0.0],
+            'pix_size': panel.get_pixel_size()[1],
+            'num_pix': panel.get_image_size()[1],
+            'prec': 2,
+            'element': i
         }
 
     return axis_dict
