@@ -14,12 +14,12 @@ def get_axes(cifd) -> dict:
     axes = {}
     for i, name in enumerate(cifd['_axis.id']):
         axes[name] = d = {f: cifd[f'_axis.{f}'][i] for f in fields}
-        d['vector'] = np.array((
+        d['vector'] = np.array([
             float(cifd[f'_axis.vector[{d}]'][i]) for d in (1, 2, 3)
-        ))
-        d['offset'] = np.array((
+        ])
+        d['offset'] = np.array([
             float(cifd[f'_axis.offset[{d}]'][i]) for d in (1, 2, 3)
-        ))
+        ])
 
     return axes
 
@@ -94,3 +94,30 @@ def test_from_hdf5(tmp_path):
         ["FJ_P5P1/FJ_P5P1_1_000004.h5"] * 600
     )
     assert res['_array_data_external_data.path'] == ["/data"] * 3600
+
+
+def test_axis_rotation(tmp_path):
+    out_path = tmp_path / 'result.cif'
+    main([
+        str(samples_dir / '6R17.expt'),
+        "--no-check-format",
+        "--dir", "/gpfs/exfel/data/scratch/dallanto/DATA/MCBF/DLS-I24/proteindiffraction.org-6r17-syce2tex12-cbf-partial/",
+        "--url", "https://data.proteindiffraction.org/other/6r17.tar.bz2",
+        "-o", str(out_path)
+    ])
+    assert out_path.is_file()
+
+    res = ReadCif(str(out_path))['result']
+    axes = get_axes(res)
+
+    gonio_ax_names = {k for (k, v) in axes.items() if v['equipment'] == 'goniometer'}
+    assert gonio_ax_names == {'GON_OMEGA'}
+    assert axes['GON_OMEGA']['depends_on'] == '.'
+    # In the DIALS .expt file, the goniometer axis is y: (0, 1, 0)
+    # In ImgCIF that should be converted to x.
+    np.testing.assert_allclose(axes['GON_OMEGA']['vector'], [1, 0, 0])
+
+    # The other axes should all have the same rotation applied
+    np.testing.assert_allclose(axes['Trans']['vector'], [0, 0, -1])
+    np.testing.assert_allclose(axes['ele1_slow']['vector'], [-1, 0, 0])
+    np.testing.assert_allclose(axes['ele1_fast']['vector'], [0, -1, 0])
