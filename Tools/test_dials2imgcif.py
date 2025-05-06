@@ -71,3 +71,26 @@ def test_rsync_url(tmp_path):
         f"rsync://data.sbgrid.org/10.15785/SBGRID/973/PNP545_{i:04}.img"
         for i in range(1, 91)
     ]
+
+
+def test_from_hdf5(tmp_path):
+    out_path = tmp_path / 'result.cif'
+    main([
+        str(samples_dir / 'P5P1' / 'FJ_P5P1'/ 'FJ_P5P1_1_master.h5'),
+        "--dir", str(samples_dir / 'P5P1'),
+        "--url", "https://zenodo.org/records/10972988/files/FJ_P5P1.zip",
+        "-o", str(out_path)
+    ])
+    assert out_path.is_file()
+
+    res = ReadCif(str(out_path))['result']
+    assert res['_array_data_external_data.uri'][0] == (
+        "https://zenodo.org/records/10972988/files/FJ_P5P1.zip"
+    )
+    assert res['_array_data_external_data.archive_path'] == (
+        ["FJ_P5P1/FJ_P5P1_1_000001.h5"] * 1000 +
+        ["FJ_P5P1/FJ_P5P1_1_000002.h5"] * 1000 +
+        ["FJ_P5P1/FJ_P5P1_1_000003.h5"] * 1000 +
+        ["FJ_P5P1/FJ_P5P1_1_000004.h5"] * 600
+    )
+    assert res['_array_data_external_data.path'] == ["/data"] * 3600
