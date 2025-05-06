@@ -53,3 +53,21 @@ def test_basic(tmp_path):
     assert res['_array_data_external_data.uri'][0] == 'https://zenodo.org/records/5886687/files/cbf_b4_1.tar.bz2'
     assert res['_array_data_external_data.archive_format'][0] == 'TBZ'
     assert res['_array_data_external_data.archive_path'][0] == 's01f0001.cbf'
+
+
+def test_rsync_url(tmp_path):
+    out_path = tmp_path / 'result.cif'
+    main([
+        str(samples_dir / '8CUB.expt'),
+        "--no-check-format",
+        "--dir", "/gpfs/exfel/data/scratch/kluyvert/imgcif-conv/8CUB/973/",
+        "--url-base", "rsync://data.sbgrid.org/10.15785/SBGRID/973",
+        "-o", str(out_path)
+    ])
+    assert out_path.is_file()
+
+    res = ReadCif(str(out_path))['result']
+    assert res['_array_data_external_data.uri'] == [
+        f"rsync://data.sbgrid.org/10.15785/SBGRID/973/PNP545_{i:04}.img"
+        for i in range(1, 91)
+    ]
