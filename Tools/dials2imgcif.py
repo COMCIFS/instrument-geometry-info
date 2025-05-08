@@ -711,9 +711,12 @@ def parse_commandline(argv):
 
     return args
 
-def main():
+def main(argv=None):
 
-    args = parse_commandline(sys.argv[1:])
+    if argv is None:
+        argv = sys.argv[1:]
+
+    args = parse_commandline(argv)
     out_fn = args.output_file
     if not out_fn.suffix:
         out_fn = out_fn.with_suffix('.cif')

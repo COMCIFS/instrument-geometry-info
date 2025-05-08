@@ -1,0 +1,29 @@
+name: Test dials2imgcif
+
+on:
+  push:
+    paths:
+      - 'Tools/**'
+  pull_request:
+    paths:
+      - 'Tools/**'
+  workflow_dispatch:
+
+jobs:
+  pytest-py312:
+    runs-on: "ubuntu-latest"
+    defaults:
+      run:
+        shell: bash -el {0}
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          conda-remove-defaults: true
+          python-version: "3.12"
+          environment-file: Tools/dials2imgcif-test-env.yml
+
+      - run: conda list
+      - run: pytest Tools/test_dials2imgcif.py

@@ -1,0 +1,9 @@
+name: dials2imgcif-test-env
+channels:
+  - conda-forge
+dependencies:
+  - dxtbx
+  - numpy
+  - h5py
+  - pycifrw
+  - pytest
