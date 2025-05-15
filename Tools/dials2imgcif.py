@@ -535,7 +535,7 @@ def write_scan_info(expts: ExperimentList, g_axes, d_axes, outf):
         for ax, v in g_axes.items():
             if ax == scan_ax:
                 rows.append((
-                    scan_id, ax, ".", ".", ".", fmt(start), fmt(step), fmt(full_range)
+                    scan_id, ax, ".", ".", ".", fmt(start), format(step, '.4f'), fmt(full_range)
                 ))
             else:
                 rows.append((
