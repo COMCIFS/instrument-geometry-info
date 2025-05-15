@@ -121,3 +121,23 @@ def test_axis_rotation(tmp_path):
     np.testing.assert_allclose(axes['Trans']['vector'], [0, 0, -1])
     np.testing.assert_allclose(axes['ele1_slow']['vector'], [-1, 0, 0])
     np.testing.assert_allclose(axes['ele1_fast']['vector'], [0, -1, 0])
+
+
+def test_multiframe_tiff(tmp_path):
+    out_path = tmp_path / 'result.cif'
+    main([
+        str(samples_dir / 'xrd-285.expt'),
+        "--no-check-format",
+        "--dir", "/gpfs/exfel/data/scratch/kluyvert/imgcif-conv/xrd-285/",
+        "--url-base", "https://xrda.pdbj.org/rest/public/entries/download/285/",
+        "-o", str(out_path)
+    ])
+    assert out_path.is_file()
+
+    res = ReadCif(str(out_path))['result']
+
+    assert res['_array_data_external_data.uri'][0] == (
+        "https://xrda.pdbj.org/rest/public/entries/download/285/frames/2024-10-04_12.32.11_24_0.0419_MicroED_36.tif"
+    )
+    assert res['_array_data_external_data.frame'] == [str(n+1) for n in range(146)]
+    assert '_array_data_external_data.path' not in res

@@ -340,14 +340,16 @@ def gen_external_locations(expts: ExperimentList, args):
         if fmt == 'HDF5':
             total_n_frames = 0
             for file_rel_path, obj_path, n in find_hdf5_images(local_name, args.dir):
-                d = {'format': fmt, 'num_frames': n, 'path': obj_path} \
+                d = {'format': fmt, 'num_frames': n, 'path': obj_path,
+                     'single_file': True} \
                     | download_fields(file_rel_path, s_ix)
                 ext_info.append(d)
                 total_n_frames += n
                 print(f"{n} images in file {file_rel_path}")
             assert total_n_frames == n_frames, f"{total_n_frames} != {n_frames}"
         else:
-            d = {'format': fmt, 'num_frames': n_frames} \
+            single_file = expt.imageset.data().has_single_file_reader()
+            d = {'format': fmt, 'num_frames': n_frames, 'single_file': single_file} \
                 | download_fields(template_rel_path, s_ix)
             ext_info.append(d)
             debug('External name dictionary', d)
@@ -374,6 +376,8 @@ def guess_file_type(name: str):
         return 'CBF'
     elif name.endswith(('.h5', '.nxs')):
         return 'HDF5'
+    elif name.endswith('.tif'):
+        return 'TIFF'
     else:
         print(f"WARNING: Unable to determine type of image file ({name})")
         return '???'
@@ -613,7 +617,9 @@ def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
     if 'archive_format' in ext_info[0]:
         fields += ['archive_format', 'archive_path']
     if ext_info[0]['format'] == 'HDF5':
-        fields += ['path', 'frame']
+        fields += ['path']
+    if ext_info[0]['single_file']:
+        fields += ['frame']
 
     counter = 1
     rows = []
@@ -631,7 +637,9 @@ def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
                       encode_scan_step(extf['archive_path_template'], fr_ix)]
 
             if extf['format'] == 'HDF5':
-                r += [extf['path'], fr_ix]
+                r += [extf['path']]
+            if extf['single_file']:
+                r += [fr_ix]
             rows.append(r)
             counter += 1
 
@@ -756,4 +764,3 @@ def main(argv=None):
 if __name__ == '__main__':
 
     main()
-
