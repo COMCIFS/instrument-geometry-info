@@ -13,6 +13,7 @@ from typing import Optional
 
 import h5py
 import numpy as np
+from dxtbx.format.FormatSMV import FormatSMV
 from dxtbx.model import Detector, ExperimentList, MultiAxisGoniometer, Panel
 from dxtbx.model.experiment_list import ExperimentListFactory
 from scipy.spatial.transform import Rotation as R
@@ -333,7 +334,9 @@ def gen_external_locations(expts: ExperimentList, args):
     for (s_ix, expt) in enumerate(expts):
         local_name = Path(expt.imageset.get_template()) # complete local path as in expt
         template_rel_path = local_name.relative_to(args.dir)
-        fmt = args.format or guess_file_type(template_rel_path.name)
+        fmt = args.format or guess_file_type(
+            template_rel_path.name, expt.imageset.get_format_class()
+        )
 
         n_frames = expt.scan.get_num_images()
 
@@ -371,8 +374,10 @@ def guess_archive_type(url: str):
     return '???'
     
 
-def guess_file_type(name: str):
-    if name.endswith('.cbf'):
+def guess_file_type(name: str, dxtbx_fmt_cls):
+    if issubclass(dxtbx_fmt_cls, FormatSMV):
+        return 'SMV'
+    elif name.endswith('.cbf'):
         return 'CBF'
     elif name.endswith(('.h5', '.nxs')):
         return 'HDF5'
