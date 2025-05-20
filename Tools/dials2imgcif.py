@@ -526,7 +526,7 @@ def write_scan_info(expts: ExperimentList, g_axes, d_axes, outf):
 
     for s_ix, expt in enumerate(expts):
 
-        scan_id = f'SCAN0{s_ix+1}'
+        scan_id = f'SCAN{s_ix+1:02}'
 
         if isinstance(expt.goniometer, MultiAxisGoniometer):
             gonio_names = expt.goniometer.get_names()
