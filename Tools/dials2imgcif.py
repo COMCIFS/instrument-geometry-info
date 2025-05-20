@@ -526,7 +526,7 @@ def write_scan_info(expts: ExperimentList, g_axes, d_axes, outf):
 
     for s_ix, expt in enumerate(expts):
 
-        scan_id = f'SCAN{s_ix+1:02}'
+        scan_id = f'SCAN.{s_ix+1}'
 
         if isinstance(expt.goniometer, MultiAxisGoniometer):
             gonio_names = expt.goniometer.get_names()
@@ -565,7 +565,7 @@ def write_frame_ids(expts: ExperimentList, outf, scan_frame_limit=np.inf):
     for s_ix, expt in enumerate(expts, start=1):
         n_frames = expt.scan.get_num_images()
         end_cnt = counter + n_frames - 1
-        rows.append((f"SCAN{s_ix:02}", f"frm{counter}", f"frm{end_cnt}", n_frames))
+        rows.append((f"SCAN.{s_ix}", f"frm{counter}", f"frm{end_cnt}", n_frames))
         counter = end_cnt + 1
 
     outf.write(cif_loop(
@@ -579,7 +579,7 @@ def write_frame_ids(expts: ExperimentList, outf, scan_frame_limit=np.inf):
     for s_ix, expt in enumerate(expts, start=1):
         exp_time = expt.scan.get_exposure_times()
         for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
-            rows.append((f"frm{counter}", f"SCAN{s_ix:02}", f_ix + 1, exp_time[f_ix]))
+            rows.append((f"frm{counter}", f"SCAN.{s_ix}", f_ix + 1, exp_time[f_ix]))
             counter += 1
 
     outf.write(cif_loop(
