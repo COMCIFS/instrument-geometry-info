@@ -779,7 +779,8 @@ def main(argv=None):
         locations = [ArchiveUrl(u, args.dir, args.archive_type or guess_archive_type(u))
                      for u in args.url]
     elif args.url_base:
-        locations = [DirectoryUrl(u) for u in args.url]
+        locations = [DirectoryUrl(u) for u in args.url_base]
+        print(locations)
     else:
         raise ValueError("--url or --url-base is required")
 
@@ -796,7 +797,7 @@ def main(argv=None):
 
 
     with out_fn.open('w') as outf:
-        make_cif(expts, outf, out_fn.stem,
+        make_cif(expts, outf, out_fn.stem, locations,
                  overload_value=args.overload_value, frame_limit=frame_limit)
 
 
