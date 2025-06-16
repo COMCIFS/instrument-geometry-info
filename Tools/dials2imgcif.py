@@ -428,6 +428,8 @@ _diffrn_radiation.type             xray
 def cif_loop(base_name: str, fields: list, rows) -> str:
     """Assemble a loop_ table ready to be written to a CIF file"""
     for i, row in enumerate(rows, start=1):
+        if len(row) == 1 and row[0].startswith('#'):
+            continue  # Comment row
         if len(row) != len(fields):
             raise ValueError(
                 f"Row {i} has unexpected length ({len(row)} != {len(fields)}"
@@ -583,6 +585,8 @@ def write_frame_ids(expts: ExperimentList, outf, scan_frame_limit=np.inf):
         for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
             rows.append((f"frm{counter}", f"SCAN.{s_ix}", f_ix + 1, exp_time[f_ix]))
             counter += 1
+        if (n_cut := expt.scan.get_num_images() - scan_frame_limit) > 0:
+            rows.append((f"# - {n_cut} rows cut for preview -",))
 
     outf.write(cif_loop(
         "_diffrn_scan_frame",
@@ -601,6 +605,8 @@ def write_frame_images(expts: ExperimentList, outf, scan_frame_limit=np.inf):
         for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
             rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
             counter += 1
+        if (n_cut := expt.scan.get_num_images() - scan_frame_limit) > 0:
+            rows.append((f"# - {n_cut} rows cut for preview -",))
 
     outf.write(cif_loop(
         "_diffrn_data_frame",
@@ -610,11 +616,15 @@ def write_frame_images(expts: ExperimentList, outf, scan_frame_limit=np.inf):
 
     # Now link images with external locations
 
+    rows = [("IMAGE", i, i) for i in range(1, counter)]
+    if (n_cut := sum(e.scan.get_num_images() for e in expts) - (counter - 1)) > 0:
+        rows.append((f"# - {n_cut} rows cut for preview -",))
     outf.write(cif_loop(
         "_array_data",
         ["array_id", "binary_id", "external_data_id"],
-        [("IMAGE", i, i) for i in range(1, counter)]
+        rows
     ))
+
 
 
 def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
@@ -649,6 +659,8 @@ def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
                 r += [fr_ix]
             rows.append(r)
             counter += 1
+        if (n_cut := extf['num_frames'] - scan_frame_limit) > 0:
+            rows.append((f"# - {n_cut} rows cut for preview -",))
 
     outf.write(cif_loop("_array_data_external_data", fields, rows))
 
