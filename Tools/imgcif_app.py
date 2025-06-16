@@ -65,6 +65,7 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self.ui.preview.document().setDefaultFont(QtGui.QFont("monospace", 10))
 
         self.ui.files_btn.clicked.connect(self.add_data_files)
         self.ui.folder_btn.clicked.connect(self.add_data_folder)

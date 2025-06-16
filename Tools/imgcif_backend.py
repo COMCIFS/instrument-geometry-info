@@ -75,7 +75,6 @@ class Backend:
 
         for url_pat, doi_template in DOI_RULES:
             matches = [re.match(url_pat, u) for u in urls]
-            print(matches)
             if all(matches):
                 id_part = matches[0][1]
                 if all(m[1] == id_part for m in matches[1:]):
