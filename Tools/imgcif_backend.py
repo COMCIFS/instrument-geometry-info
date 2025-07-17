@@ -31,7 +31,15 @@ def line_helper(sock):
         read_buffer.append(b)
 
 class Backend:
-    COMMANDS = {'reset', 'add_paths', 'set_expt', 'set_download_files', 'set_download_archives', 'set_doi'}
+    COMMANDS = {
+        'reset',
+        'add_paths',
+        'set_expt',
+        'set_download_files',
+        'set_download_archives',
+        'set_doi',
+        'save',
+    }
 
     def __init__(self):
         self.expt_list: ExperimentList = ExperimentList([])
@@ -81,6 +89,17 @@ class Backend:
                     return doi_template.format(id_part)
 
         return ""
+
+    def save(self, path):
+        doi = self.explicit_doi or self.guess_doi()
+        with open(path, 'w') as f:
+            make_cif(
+                self.expt_list,
+                f,
+                data_name='preview',
+                locations=self.download_locations,
+                doi=doi,
+            )
 
     def state(self):
         doi = self.explicit_doi or self.guess_doi()

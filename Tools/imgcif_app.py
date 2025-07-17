@@ -1,4 +1,5 @@
 import json
+import os.path
 import sys
 from socket import socketpair, SHUT_RDWR
 
@@ -86,6 +87,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.backend.state_update.connect(self.multi_archive_dialog.state_update)
         self.ui.multi_archives_btn.clicked.connect(self.multi_archive_dialog.show)
         self.multi_archive_dialog.accepted.connect(self.configure_multi_archives)
+        self.ui.save_btn.clicked.connect(self.save_cif)
 
         # Where fields can be filled manually or automatically, automatic input
         # shouldn't replace manual
@@ -172,6 +174,14 @@ class MainWindow(QtWidgets.QMainWindow):
         sb_fract = (sb.value() - sb_min) / ((sb_max - sb_min) or 1)  # Avoid divide-by-zero
         self.ui.preview.setPlainText(contents)
         sb.setValue(int(sb_fract * (sb.maximum() - sb.minimum()) + sb.minimum()))
+
+    def save_cif(self):
+        path, _ = QFileDialog.getSaveFileName(self, "Save CIF output",
+                                              filter="CIF files (*.cif)")
+        if path:
+            if os.path.splitext(path)[1] == '':
+                path += '.cif'
+            self.backend.send_message("save", {'path': path})
 
     adeqt_window = None
 

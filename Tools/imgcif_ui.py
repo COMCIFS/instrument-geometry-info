@@ -272,6 +272,20 @@ class Ui_MainWindow(object):
 
         self.verticalLayout_5.addItem(self.verticalSpacer)
 
+        self.horizontalLayout_9 = QHBoxLayout()
+        self.horizontalLayout_9.setObjectName(u"horizontalLayout_9")
+        self.horizontalSpacer_5 = QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+
+        self.horizontalLayout_9.addItem(self.horizontalSpacer_5)
+
+        self.save_btn = QPushButton(self.verticalLayoutWidget)
+        self.save_btn.setObjectName(u"save_btn")
+
+        self.horizontalLayout_9.addWidget(self.save_btn)
+
+
+        self.verticalLayout_5.addLayout(self.horizontalLayout_9)
+
         self.splitter.addWidget(self.verticalLayoutWidget)
         self.groupBox = QGroupBox(self.splitter)
         self.groupBox.setObjectName(u"groupBox")
@@ -347,6 +361,7 @@ class Ui_MainWindow(object):
         self.label_5.setText(QCoreApplication.translate("MainWindow", u"Overload value", None))
         self.label_6.setText(QCoreApplication.translate("MainWindow", u"File format", None))
 
+        self.save_btn.setText(QCoreApplication.translate("MainWindow", u"Save file", None))
         self.groupBox.setTitle(QCoreApplication.translate("MainWindow", u"Preview", None))
         self.preview.setPlaceholderText(QCoreApplication.translate("MainWindow", u"CIF preview will appear here", None))
     # retranslateUi
