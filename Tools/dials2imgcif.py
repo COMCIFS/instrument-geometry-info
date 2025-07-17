@@ -411,6 +411,9 @@ def find_hdf5_images(master_path):
 
 # ============ Output =============
 
+def write_doi(doi, outf):
+    if doi:
+        outf.write(f"_database.dataset_doi   {doi!r}\n")
 
 def write_beam_info(expts: ExperimentList, outf):
     wl = expts[0].beam.get_wavelength()
@@ -677,10 +680,11 @@ def encode_scan_step(template, val):
     return re.sub(r"(#+)\.", repl, template)
 
 
-def make_cif(expts, outf, data_name, locations,
+def make_cif(expts, outf, data_name, locations, doi=None,
              file_type=None, overload_value=None, frame_limit=np.inf):
     outf.write(CIF_HEADER.format(name=data_name))
 
+    write_doi(doi, outf)
 
     write_beam_info(expts, outf)
 

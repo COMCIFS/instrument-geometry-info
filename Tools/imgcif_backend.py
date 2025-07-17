@@ -83,11 +83,19 @@ class Backend:
         return ""
 
     def state(self):
+        doi = self.explicit_doi or self.guess_doi()
+
         if self.expt_list:
             sio = io.StringIO()
             try:
-                make_cif(self.expt_list, sio, data_name='preview',
-                         locations=self.download_locations, frame_limit=5)
+                make_cif(
+                    self.expt_list,
+                    sio,
+                    data_name='preview',
+                    locations=self.download_locations,
+                    doi=doi,
+                    frame_limit=5,
+                )
             except Exception:
                 traceback.print_exc()
                 preview = None
@@ -106,7 +114,7 @@ class Backend:
             'n_frames': sum([e.scan.get_num_images() for e in self.expt_list]),
             'file_type': file_type,
             'doi_set': bool(self.explicit_doi),
-            'doi': (self.explicit_doi or self.guess_doi()),
+            'doi': doi,
             'cif_preview': preview,
         }
 
