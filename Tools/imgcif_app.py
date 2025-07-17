@@ -68,6 +68,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.setupUi(self)
         self.ui.preview.document().setDefaultFont(QtGui.QFont("monospace", 10))
 
+        # Hook up the UI to the logic
         self.ui.files_btn.clicked.connect(self.add_data_files)
         self.ui.folder_btn.clicked.connect(self.add_data_folder)
         self.ui.expt_file_btn.clicked.connect(self.set_expt_file)
@@ -80,11 +81,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.archive_folder_path.editingFinished.connect(self.set_download_details)
         self.ui.archive_format.currentTextChanged.connect(self.set_download_details)
 
-        self.backend = BackendManager(self)
-        self.backend.state_update.connect(self.state_update)
-
         self.multi_archive_dialog = MultiArchiveDialog(self)
-        self.backend.state_update.connect(self.multi_archive_dialog.state_update)
         self.ui.multi_archives_btn.clicked.connect(self.multi_archive_dialog.show)
         self.multi_archive_dialog.accepted.connect(self.configure_multi_archives)
         self.ui.save_btn.clicked.connect(self.save_cif)
@@ -92,9 +89,14 @@ class MainWindow(QtWidgets.QMainWindow):
         # Where fields can be filled manually or automatically, automatic input
         # shouldn't replace manual
         self.doi_entered = False
-        self.ui.doi.textEdited.connect(self.set_doi_entered)
+        self.ui.doi.textEdited.connect(self.set_doi)
         self.file_format_chosen = False
-        self.ui.file_format.textActivated.connect(self.set_file_format_chosen)
+        self.ui.file_format.textActivated.connect(self.set_file_format)
+
+        # Start the backend
+        self.backend = BackendManager(self)
+        self.backend.state_update.connect(self.state_update)
+        self.backend.state_update.connect(self.multi_archive_dialog.state_update)
 
         adeqt_shortcut = QtGui.QShortcut(QtGui.QKeySequence(Qt.Key.Key_F12), self)
         adeqt_shortcut.activated.connect(self.show_adeqt)
@@ -145,11 +147,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 'archive_type': self.ui.archive_format.currentText() or None,
             })
 
-    def set_doi_entered(self, s):
+    def set_doi(self, s):
         self.doi_entered = bool(s)
+        self.backend.send_message('set_doi', {'doi': s})
 
-    def set_file_format_chosen(self, s):
+    def set_file_format(self, s):
         self.file_format_chosen = bool(s)
+        self.backend.send_message('set_file_type', {'file_type': s})
 
     def state_update(self, state):
         """New info from the backend"""

@@ -37,6 +37,7 @@ class Backend:
         'set_expt',
         'set_download_files',
         'set_download_archives',
+        'set_file_type',
         'set_doi',
         'save',
     }
@@ -44,6 +45,7 @@ class Backend:
     def __init__(self):
         self.expt_list: ExperimentList = ExperimentList([])
         self.download_locations = [PlaceholderUrl()]
+        self.explicit_file_type = None
         self.explicit_doi = None
 
     def reset(self):
@@ -66,6 +68,9 @@ class Backend:
         self.download_locations = [ArchiveUrl(
             url, local_dir, archive_type or guess_archive_type(url)
         )]
+
+    def set_file_type(self, file_type):
+        self.explicit_file_type = file_type
 
     def set_doi(self, doi):
         self.explicit_doi = doi
@@ -91,13 +96,21 @@ class Backend:
         return ""
 
     def save(self, path):
+        if not self.expt_list:
+            return  # TODO: error
         doi = self.explicit_doi or self.guess_doi()
+        expt0 = self.expt_list[0]
+        path0 = Path(expt0.imageset.get_template())
+        file_type = self.explicit_file_type or guess_file_type(
+            path0.name, expt0.imageset.get_format_class()
+        )
         with open(path, 'w') as f:
             make_cif(
                 self.expt_list,
                 f,
                 data_name='preview',
                 locations=self.download_locations,
+                file_type=file_type,
                 doi=doi,
             )
 
@@ -105,6 +118,12 @@ class Backend:
         doi = self.explicit_doi or self.guess_doi()
 
         if self.expt_list:
+            expt0 = self.expt_list[0]
+            path0 = Path(expt0.imageset.get_template())
+            file_type = self.explicit_file_type or guess_file_type(
+                path0.name, expt0.imageset.get_format_class()
+            )
+
             sio = io.StringIO()
             try:
                 make_cif(
@@ -112,6 +131,7 @@ class Backend:
                     sio,
                     data_name='preview',
                     locations=self.download_locations,
+                    file_type=file_type,
                     doi=doi,
                     frame_limit=5,
                 )
@@ -120,10 +140,6 @@ class Backend:
                 preview = None
             else:
                 preview = sio.getvalue()
-
-            expt0 = self.expt_list[0]
-            path0 = Path(expt0.imageset.get_template())
-            file_type = guess_file_type(path0.name, expt0.imageset.get_format_class())
         else:
             file_type = preview = ""
 
