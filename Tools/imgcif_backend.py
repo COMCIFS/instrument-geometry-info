@@ -1,5 +1,6 @@
 import io
 import json
+import os.path
 import re
 import socket
 import sys
@@ -108,7 +109,7 @@ class Backend:
             make_cif(
                 self.expt_list,
                 f,
-                data_name='preview',
+                data_name=os.path.basename(path).rsplit('.', 1)[0],
                 locations=self.download_locations,
                 file_type=file_type,
                 doi=doi,
