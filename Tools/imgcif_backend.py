@@ -65,10 +65,12 @@ class Backend:
         url_base = url.rpartition('/')[0]
         self.download_locations = [DirectoryUrl(url_base)]
 
-    def set_download_archives(self, url, local_dir, archive_type=None):
-        self.download_locations = [ArchiveUrl(
-            url, local_dir, archive_type or guess_archive_type(url)
-        )]
+    def set_download_archives(self, details):
+        locations = []
+        for kw in details:
+            archive_type = kw.pop('archive_type') or guess_archive_type(kw['url'])
+            locations.append(ArchiveUrl(**kw, archive_type=archive_type))
+        self.download_locations = locations
 
     def set_file_type(self, file_type):
         self.explicit_file_type = file_type

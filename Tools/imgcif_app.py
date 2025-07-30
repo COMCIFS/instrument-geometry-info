@@ -133,18 +133,22 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def configure_multi_archives(self):
         """Called when multi-archive dialog accepted"""
-        ...
+        self.set_download_details()
 
     def set_download_details(self):
         if self.ui.download_files_rb.isChecked():
             self.backend.send_message('set_download_files', {
                 'url': self.ui.file_url.text()
             })
-        else:
-            self.backend.send_message('set_download_archives', {
+        elif self.ui.download_archive_rb.isChecked():
+            self.backend.send_message('set_download_archives', {'details': [{
                 'url': self.ui.archive_url.text(),
-                'local_dir': self.ui.archive_folder_path.text(),
+                'dir': self.ui.archive_folder_path.text(),
                 'archive_type': self.ui.archive_format.currentText() or None,
+            }]})
+        else:  # download_multi_archives_rb
+            self.backend.send_message('set_download_archives', {
+                'details': self.multi_archive_dialog.get_download_details()
             })
 
     def set_doi(self, s):
@@ -224,6 +228,19 @@ class MultiArchiveDialog(QtWidgets.QDialog):
 
         for i, descr in enumerate(state['expt_summaries']):
             tbl.item(i, 0).setText(descr)
+
+    def get_download_details(self) -> list[dict]:
+        tbl = self.ui.table
+
+        def get_text(r, c):
+            itm = tbl.item(r, c)
+            return '' if itm is None else itm.text()
+
+        return [{
+            'url': get_text(r, 1),
+            'dir': get_text(r, 2),
+            'archive_type': tbl.cellWidget(r, 3).currentText() or None,
+        } for r in range(tbl.rowCount())]
 
 
 if __name__=="__main__":
