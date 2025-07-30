@@ -1,5 +1,6 @@
 import json
 import os.path
+import re
 import sys
 from socket import socketpair, SHUT_RDWR
 
@@ -227,14 +228,48 @@ class MultiArchiveDialog(QtWidgets.QDialog):
 
         # Add new groupboxes as needed
         layout = self.ui.scrollAreaWidgetContents.layout()
-        for _ in range(state['n_expts'] - len(gbs)):
+        for i in range(state['n_expts'] - len(gbs)):
             gb = ArchiveDownloadGroup(self.ui.scrollAreaWidgetContents)
             layout.addWidget(gb)
+            if len(gbs) + i < 2:
+                gb.ui.archive_url.textChanged.connect(self.extrapolate_urls)
+                gb.ui.archive_folder_path.textChanged.connect(self.extrapolate_folders)
 
         # Set titles from experiment summaries
         gbs = self._groupboxes()  # Refresh the list with newly added ones
         for i, (gb, descr) in enumerate(zip(gbs, state['expt_summaries'])):
             gb.setTitle(f"{i+1}: {descr}")
+
+    def extrapolate_urls(self):
+        gbs = self._groupboxes()
+        if len(gbs) < 3:
+            return
+
+        matched0 = re.split(r"(\d+)", gbs[0].ui.archive_url.text())
+        matched1 = re.split(r"(\d+)", gbs[1].ui.archive_url.text())
+        if len(matched0) != len(matched1):
+            return
+
+        if len(diffs := [
+            i for i, (p0, p1) in enumerate(zip(matched0, matched1)) if p0 != p1
+        ]) != 1:
+            return  # No difference, or >1 piece differs
+        if (diff_ix := diffs[0]) % 2 == 0:
+            return  # The difference is in a non-numeric part
+
+        width = len(matched0[diff_ix])
+        n0 = int(matched0[diff_ix])  # First number in sequence
+        if int(matched1[diff_ix]) != n0 + 1:
+            return  # Not increasing by 1
+
+        for i, gb in enumerate(gbs[2:], start=2):
+            if gb.ui.archive_url.text() == '':
+                pieces = matched0.copy()
+                pieces[diff_ix] = f"{n0 + i:0{width}}"
+                gb.ui.archive_url.setText(''.join(pieces))
+
+    def extrapolate_folders(self):
+        ...
 
     def get_download_details(self) -> list[dict]:
         return [{
