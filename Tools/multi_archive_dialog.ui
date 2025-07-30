@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>400</width>
-    <height>300</height>
+    <width>545</width>
+    <height>433</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -15,30 +15,21 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QTableWidget" name="table">
-     <property name="rowCount">
-      <number>0</number>
+    <widget class="QScrollArea" name="scrollArea">
+     <property name="widgetResizable">
+      <bool>true</bool>
      </property>
-     <column>
-      <property name="text">
-       <string>Scan</string>
+     <widget class="QWidget" name="scrollAreaWidgetContents">
+      <property name="geometry">
+       <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>525</width>
+        <height>380</height>
+       </rect>
       </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Archive URL</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Unpacked folder</string>
-      </property>
-     </column>
-     <column>
-      <property name="text">
-       <string>Archive format</string>
-      </property>
-     </column>
+      <layout class="QVBoxLayout" name="verticalLayout_2"/>
+     </widget>
     </widget>
    </item>
    <item>

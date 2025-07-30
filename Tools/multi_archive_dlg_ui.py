@@ -16,31 +16,26 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QAbstractButton, QApplication, QDialog, QDialogButtonBox,
-    QHeaderView, QSizePolicy, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget)
+    QScrollArea, QSizePolicy, QVBoxLayout, QWidget)
 
 class Ui_MultiArchiveDialog(object):
     def setupUi(self, MultiArchiveDialog):
         if not MultiArchiveDialog.objectName():
             MultiArchiveDialog.setObjectName(u"MultiArchiveDialog")
-        MultiArchiveDialog.resize(400, 300)
+        MultiArchiveDialog.resize(545, 433)
         self.verticalLayout = QVBoxLayout(MultiArchiveDialog)
         self.verticalLayout.setObjectName(u"verticalLayout")
-        self.table = QTableWidget(MultiArchiveDialog)
-        if (self.table.columnCount() < 4):
-            self.table.setColumnCount(4)
-        __qtablewidgetitem = QTableWidgetItem()
-        self.table.setHorizontalHeaderItem(0, __qtablewidgetitem)
-        __qtablewidgetitem1 = QTableWidgetItem()
-        self.table.setHorizontalHeaderItem(1, __qtablewidgetitem1)
-        __qtablewidgetitem2 = QTableWidgetItem()
-        self.table.setHorizontalHeaderItem(2, __qtablewidgetitem2)
-        __qtablewidgetitem3 = QTableWidgetItem()
-        self.table.setHorizontalHeaderItem(3, __qtablewidgetitem3)
-        self.table.setObjectName(u"table")
-        self.table.setRowCount(0)
+        self.scrollArea = QScrollArea(MultiArchiveDialog)
+        self.scrollArea.setObjectName(u"scrollArea")
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollAreaWidgetContents = QWidget()
+        self.scrollAreaWidgetContents.setObjectName(u"scrollAreaWidgetContents")
+        self.scrollAreaWidgetContents.setGeometry(QRect(0, 0, 525, 380))
+        self.verticalLayout_2 = QVBoxLayout(self.scrollAreaWidgetContents)
+        self.verticalLayout_2.setObjectName(u"verticalLayout_2")
+        self.scrollArea.setWidget(self.scrollAreaWidgetContents)
 
-        self.verticalLayout.addWidget(self.table)
+        self.verticalLayout.addWidget(self.scrollArea)
 
         self.buttonBox = QDialogButtonBox(MultiArchiveDialog)
         self.buttonBox.setObjectName(u"buttonBox")
@@ -59,13 +54,5 @@ class Ui_MultiArchiveDialog(object):
 
     def retranslateUi(self, MultiArchiveDialog):
         MultiArchiveDialog.setWindowTitle(QCoreApplication.translate("MultiArchiveDialog", u"Dialog", None))
-        ___qtablewidgetitem = self.table.horizontalHeaderItem(0)
-        ___qtablewidgetitem.setText(QCoreApplication.translate("MultiArchiveDialog", u"Scan", None));
-        ___qtablewidgetitem1 = self.table.horizontalHeaderItem(1)
-        ___qtablewidgetitem1.setText(QCoreApplication.translate("MultiArchiveDialog", u"Archive URL", None));
-        ___qtablewidgetitem2 = self.table.horizontalHeaderItem(2)
-        ___qtablewidgetitem2.setText(QCoreApplication.translate("MultiArchiveDialog", u"Unpacked folder", None));
-        ___qtablewidgetitem3 = self.table.horizontalHeaderItem(3)
-        ___qtablewidgetitem3.setText(QCoreApplication.translate("MultiArchiveDialog", u"Archive format", None));
     # retranslateUi
 

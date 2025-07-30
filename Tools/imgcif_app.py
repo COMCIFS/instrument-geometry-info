@@ -9,6 +9,7 @@ from PySide6.QtWidgets import QFileDialog
 
 from imgcif_ui import Ui_MainWindow
 from multi_archive_dlg_ui import Ui_MultiArchiveDialog
+from archive_download_ui import Ui_ArchiveDownload
 
 class BackendManager(QtCore.QObject):
     state_update = QtCore.Signal(dict)
@@ -200,47 +201,47 @@ class MainWindow(QtWidgets.QMainWindow):
         self.adeqt_window.show()
 
 
+class ArchiveDownloadGroup(QtWidgets.QGroupBox):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.ui = Ui_ArchiveDownload()
+        self.ui.setupUi(self)
+
+
 class MultiArchiveDialog(QtWidgets.QDialog):
     def __init__(self, parent: MainWindow):
         super().__init__(parent)
         self.ui = Ui_MultiArchiveDialog()
         self.ui.setupUi(self)
 
-    @staticmethod
-    def _format_combobox():
-        cb = QtWidgets.QComboBox()
-        for opt in ["", "ZIP", "TBZ", "TGZ", "TAR"]:
-            cb.addItem(opt)
-        return cb
+    def _groupboxes(self):
+        return [c for c in self.ui.scrollAreaWidgetContents.children()
+                if isinstance(c, ArchiveDownloadGroup)]
 
     def state_update(self, state):
-        tbl = self.ui.table
-        for _ in range(tbl.rowCount() - state['n_expts']):
-            tbl.removeRow(tbl.rowCount() - 1)
+        gbs = self._groupboxes()
 
-        for _ in range(state['n_expts'] - tbl.rowCount()):
-            new_ix = tbl.rowCount()
-            tbl.insertRow(new_ix)
-            descr_item = QtWidgets.QTableWidgetItem()
-            descr_item.setFlags(Qt.ItemFlag.ItemIsEnabled)  # Not editable
-            tbl.setItem(new_ix, 0, descr_item)
-            tbl.setCellWidget(new_ix, 3, self._format_combobox())
+        # Remove any excess groupboxes
+        for _ in range(len(gbs) - state['n_expts']):
+            gbs.pop(-1).deleteLater()
 
-        for i, descr in enumerate(state['expt_summaries']):
-            tbl.item(i, 0).setText(descr)
+        # Add new groupboxes as needed
+        layout = self.ui.scrollAreaWidgetContents.layout()
+        for _ in range(state['n_expts'] - len(gbs)):
+            gb = ArchiveDownloadGroup(self.ui.scrollAreaWidgetContents)
+            layout.addWidget(gb)
+
+        # Set titles from experiment summaries
+        gbs = self._groupboxes()  # Refresh the list with newly added ones
+        for i, (gb, descr) in enumerate(zip(gbs, state['expt_summaries'])):
+            gb.setTitle(f"{i+1}: {descr}")
 
     def get_download_details(self) -> list[dict]:
-        tbl = self.ui.table
-
-        def get_text(r, c):
-            itm = tbl.item(r, c)
-            return '' if itm is None else itm.text()
-
         return [{
-            'url': get_text(r, 1),
-            'dir': get_text(r, 2),
-            'archive_type': tbl.cellWidget(r, 3).currentText() or None,
-        } for r in range(tbl.rowCount())]
+            'url': gb.ui.archive_url.text(),
+            'dir': gb.ui.archive_folder_path.text(),
+            'archive_type': gb.ui.archive_format.currentText() or None,
+        } for gb in self._groupboxes()]
 
 
 if __name__=="__main__":

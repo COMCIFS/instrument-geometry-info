@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>ArchiveDownload</class>
+ <widget class="QWidget" name="ArchiveDownload">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>400</width>
+    <height>117</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Form</string>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_4">
+     <item>
+      <widget class="QLabel" name="label_2">
+       <property name="text">
+        <string>Archive URL</string>
+       </property>
+       <property name="buddy">
+        <cstring>archive_url</cstring>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="archive_url"/>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_6">
+     <item>
+      <widget class="QLabel" name="label_3">
+       <property name="text">
+        <string>Unpacked folder</string>
+       </property>
+       <property name="buddy">
+        <cstring>archive_folder_path</cstring>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLineEdit" name="archive_folder_path"/>
+     </item>
+     <item>
+      <widget class="QPushButton" name="archive_folder_btn">
+       <property name="text">
+        <string>Select</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout">
+     <item>
+      <widget class="QLabel" name="label_7">
+       <property name="text">
+        <string>Archive format</string>
+       </property>
+       <property name="buddy">
+        <cstring>archive_format</cstring>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QComboBox" name="archive_format">
+       <property name="sizePolicy">
+        <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+         <horstretch>0</horstretch>
+         <verstretch>0</verstretch>
+        </sizepolicy>
+       </property>
+       <item>
+        <property name="text">
+         <string notr="true"/>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string notr="true">ZIP</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string notr="true">TBZ</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string notr="true">TGZ</string>
+        </property>
+       </item>
+       <item>
+        <property name="text">
+         <string notr="true">TAR</string>
+        </property>
+       </item>
+      </widget>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
