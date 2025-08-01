@@ -4,6 +4,7 @@ import re
 import sys
 from socket import socketpair, SHUT_RDWR
 
+import requests
 from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt, QProcess
 from PySide6.QtWidgets import QFileDialog
@@ -63,6 +64,32 @@ class BackendManager(QtCore.QObject):
         self.read_buffer.append(b)
 
 
+class QLineEditDebounce(QtCore.QObject):
+    changed = QtCore.Signal(str)
+
+    def __init__(self, lineedit: QtWidgets.QLineEdit, delay=500):
+        super().__init__(lineedit)
+        self.lineedit = lineedit
+        self.text_when_emitted = ''
+        self.timer = QtCore.QTimer(self)
+        self.timer.setSingleShot(True)
+        self.timer.setInterval(delay)
+        self.timer.timeout.connect(self.fire)
+        lineedit.textChanged.connect(self.text_changed)
+        lineedit.editingFinished.connect(self.editing_finished)
+
+    def fire(self):
+        self.changed.emit(self.lineedit.text())
+
+    def text_changed(self):
+        self.timer.start()
+
+    def editing_finished(self):
+        if self.timer.isActive():
+            self.timer.stop()
+            self.fire()
+
+
 class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
@@ -79,7 +106,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.ui.archive_folder_btn.clicked.connect(self.pick_archive_dir)
         self.ui.download_files_rb.toggled.connect(self.set_download_details)
         self.ui.file_url.editingFinished.connect(self.set_download_details)
-        self.ui.archive_url.editingFinished.connect(self.set_download_details)
+        AsyncValidator(self.ui.archive_url).changed_valid.connect(self.set_download_details)
+        QLineEditDebounce(self.ui.archive_folder_path).changed.connect(self.set_download_details)
         self.ui.archive_folder_path.editingFinished.connect(self.set_download_details)
         self.ui.archive_format.currentTextChanged.connect(self.set_download_details)
 
@@ -277,6 +305,53 @@ class MultiArchiveDialog(QtWidgets.QDialog):
             'dir': gb.ui.archive_folder_path.text(),
             'archive_type': gb.ui.archive_format.currentText() or None,
         } for gb in self._groupboxes()]
+
+
+class AsyncValidator(QtCore.QObject):
+    changed_valid = QtCore.Signal(str)
+
+    def __init__(self, lineedit: QtWidgets.QLineEdit, delay=500):
+        super().__init__(lineedit)
+        self.lineedit = lineedit
+        self.lineedit.textChanged.connect(self.reset_style)
+        debounce = QLineEditDebounce(self.lineedit, delay=delay)
+        debounce.changed.connect(self.check)
+
+    def reset_style(self):
+        self.lineedit.setStyleSheet("")
+
+    def check(self):
+        if not (t := self.lineedit.text()):
+            return  # Field emptied, leave the default style
+        thread = UrlCheckerThread(self.lineedit.text(), self)
+        thread.check_result.connect(self.checked)
+        thread.start()
+
+    def checked(self, url, status_code):
+        if url != self.lineedit.text():
+            return  # It was edited while we were checking
+        if status_code < 400:
+            self.lineedit.setStyleSheet("QLineEdit {background: rgb(180, 255, 180);}")
+            self.changed_valid.emit(url)
+        else:
+            self.lineedit.setStyleSheet("QLineEdit {background: rgb(255, 128, 128);}")
+
+class UrlCheckerThread(QtCore.QThread):
+    # url, status code
+    check_result = QtCore.Signal(str, int)
+
+    def __init__(self, url, parent=None):
+        super().__init__(parent)
+        self.url = url
+
+    def run(self):
+        try:
+            resp = requests.get(self.url, stream=True)
+            resp.close()  # No need to read content
+        except Exception:
+            self.check_result.emit(self.url, 600)  # E.g. error parsing the URL
+        else:
+            self.check_result.emit(self.url, resp.status_code)
 
 
 if __name__=="__main__":
