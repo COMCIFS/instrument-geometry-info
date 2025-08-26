@@ -9,9 +9,9 @@ from PySide6 import QtCore, QtWidgets, QtGui
 from PySide6.QtCore import Qt, QProcess
 from PySide6.QtWidgets import QFileDialog
 
-from imgcif_ui import Ui_MainWindow
-from multi_archive_dlg_ui import Ui_MultiArchiveDialog
-from archive_download_ui import Ui_ArchiveDownload
+from .ui.main import Ui_MainWindow
+from .ui.multi_archive_dialog import Ui_MultiArchiveDialog
+from .ui.archive_download import Ui_ArchiveDownload
 
 class BackendManager(QtCore.QObject):
     state_update = QtCore.Signal(dict)
@@ -32,7 +32,7 @@ class BackendManager(QtCore.QObject):
         self.process.setProcessChannelMode(QProcess.ProcessChannelMode.ForwardedChannels)
         self.process.started.connect(self.process_started)
         self.process.finished.connect(self.process_exited)
-        self.process.start(sys.executable, ['imgcif_backend.py', str(sock_child.fileno())])
+        self.process.start(sys.executable, ['-m', 'imgCIF_app.backend', str(sock_child.fileno())])
 
         sock_child.close()
 
