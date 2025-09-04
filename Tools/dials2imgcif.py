@@ -8,8 +8,8 @@ import math
 import re
 import sys
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import h5py
 import numpy as np
@@ -65,7 +65,7 @@ def get_axes_info(expts: ExperimentList):
 
     det_axes = get_det_axes(expts, axis_rotation)
     srf_axes = get_srf_axes(expts, axis_rotation)
-    
+
     return gon_axes, det_axes, srf_axes
 
 
@@ -124,7 +124,7 @@ def get_det_axes(expts: ExperimentList, axis_rotation):
 
     d_info = expts[0].detector
 
-    # Sanity check 
+    # Sanity check
     pp = find_perp_panel(d_info, axis_rotation)
     if pp is None:
         raise AssertionError('Unable to find a panel perpendicular to the beam at tth = 0')
@@ -145,7 +145,7 @@ def get_det_axes(expts: ExperimentList, axis_rotation):
             'next': '.',
             'type': 'rotation'
         }
-    
+
     dists = [get_distance(e.detector[pp], axis_rotation)
              for e in expts]
 
@@ -224,7 +224,7 @@ def find_perp_panel(d_info: Detector, axis_rotation):
 def get_srf_axes(expts: ExperimentList, axis_rotation):
     """ Return the axis directions of each panel when tth = 0
     """
-    
+
     d_info = expts[0].detector
     panel_names = [p.get_name() for p in d_info]
 
@@ -234,13 +234,13 @@ def get_srf_axes(expts: ExperimentList, axis_rotation):
         assert _panel_names == panel_names, f"{_panel_names} != {panel_names} (expt {i})"
 
     axis_dict = {}
-    
+
     tth_angl, tth_axis = get_two_theta(d_info, axis_rotation)
     for i, panel in enumerate(d_info, start=1):
         fast = axis_rotation.apply(panel.get_fast_axis())
         slow = axis_rotation.apply(panel.get_slow_axis())
         origin = axis_rotation.apply(panel.get_origin())
-        
+
         if tth_axis is not None:
             # rotation matrix from 2theta angle-axis (reverse angle)
             rot_vec = tth_angl * tth_axis  # exp. result in separate test, but may need *-1
@@ -251,7 +251,7 @@ def get_srf_axes(expts: ExperimentList, axis_rotation):
             origin = np.around(np.dot(rot_mat, origin), decimals=3)
 
         origin = [origin[0], origin[1], 0.0]   # z component is distance
-        
+
         axis_dict[f'ele{i}_fast'] = {
             'axis': fast,
             'next': "Trans",
@@ -290,7 +290,33 @@ def get_srf_axes(expts: ExperimentList, axis_rotation):
 
 # === Derived information to prepare external links ===
 
-def gen_external_locations(expts: ExperimentList, args):
+@dataclass
+class ArchiveUrl:
+    url: str
+    dir: Path
+    archive_type: str | None
+
+    def cif_fields(self, template_path: Path):
+        rel_path = template_path.relative_to(self.dir)
+        return {'uri': self.url, 'archive_format': self.archive_type,
+                'archive_path_template': str(rel_path)}
+
+@dataclass
+class DirectoryUrl:
+    url_base: str
+
+    def cif_fields(self, template_path: Path):
+        return {'uri_template': self.url_base.rstrip('/') + '/' + template_path.name}
+
+class PlaceholderUrl:
+    def cif_fields(self, template_path: Path):
+        return {'uri_template': '????'}
+
+
+def gen_external_locations(
+        expts: ExperimentList, locations: list[ArchiveUrl | DirectoryUrl],
+        file_type=None,
+):
     """ Based on command-line arguments and the scan information collected
         at this point, we create per-scan information to be written out as
         external file links later.
@@ -298,62 +324,37 @@ def gen_external_locations(expts: ExperimentList, args):
     """
 
     n_scans = len(expts)
-    url_bases: Optional[list[str]] = None
-    urls: Optional[list[str]] = None
-    if args.url_base:
-        if len(args.url_base) == 1:
-            url_bases = args.url_base * n_scans
-        elif len(args.url_base) == n_scans:
-            url_bases = args.url_base
-        else:
-            raise ValueError(
-                f"--url-bases should have 1 parameter or 1 per scan ({n_scans})"
-            )
-    elif args.url:
-        if len(args.url) == 1:
-            urls = args.url * n_scans
-        elif len(args.url) == n_scans:
-            urls = args.url
-        else:
-            raise ValueError(f"--url should have 1 parameter or 1 per scan ({n_scans})")
-    else:
-        raise ValueError("--url or --url-base is required")
-
-    def download_fields(rel_path, scan_ix):
-        if url_bases is not None:
-            ub = url_bases[scan_ix]
-            return {'uri_template': ub.rstrip('/') + '/' + str(rel_path)}
-        else:
-            url = urls[scan_ix]
-            arch_fmt = args.archive_type or guess_archive_type(url)
-            return {'uri': url, 'archive_format': arch_fmt,
-                    'archive_path_template': str(rel_path)}
+    if len(locations) == 1:
+        locations *= n_scans
+    elif len(locations) != n_scans:
+        raise ValueError(
+            f"Got {len(locations)} download locations; expected 1 or 1 per scan ({n_scans})"
+        )
 
     ext_info = []
 
-    for (s_ix, expt) in enumerate(expts):
-        local_name = Path(expt.imageset.get_template()) # complete local path as in expt
-        template_rel_path = local_name.relative_to(args.dir)
-        fmt = args.format or guess_file_type(
-            template_rel_path.name, expt.imageset.get_format_class()
+    for expt, download_loc in zip(expts, locations):
+        template_path = Path(expt.imageset.get_template())  # complete local path as in expt
+        fmt = file_type or guess_file_type(
+            template_path.name, expt.imageset.get_format_class()
         )
 
         n_frames = expt.scan.get_num_images()
 
         if fmt == 'HDF5':
             total_n_frames = 0
-            for file_rel_path, obj_path, n in find_hdf5_images(local_name, args.dir):
+            for file_path, obj_path, n in find_hdf5_images(template_path):
                 d = {'format': fmt, 'num_frames': n, 'path': obj_path,
                      'single_file': True} \
-                    | download_fields(file_rel_path, s_ix)
+                    | download_loc.cif_fields(file_path)
                 ext_info.append(d)
                 total_n_frames += n
-                print(f"{n} images in file {file_rel_path}")
+                print(f"{n} images in file {file_path}")
             assert total_n_frames == n_frames, f"{total_n_frames} != {n_frames}"
         else:
             single_file = expt.imageset.data().has_single_file_reader()
             d = {'format': fmt, 'num_frames': n_frames, 'single_file': single_file} \
-                | download_fields(template_rel_path, s_ix)
+                | download_loc.cif_fields(template_path)
             ext_info.append(d)
             debug('External name dictionary', d)
 
@@ -372,7 +373,7 @@ def guess_archive_type(url: str):
 
     print(f"WARNING: could not guess archive type from URL ({url})")
     return '???'
-    
+
 
 def guess_file_type(name: str, dxtbx_fmt_cls):
     if issubclass(dxtbx_fmt_cls, FormatSMV):
@@ -388,7 +389,7 @@ def guess_file_type(name: str, dxtbx_fmt_cls):
         return '???'
 
 
-def find_hdf5_images(master_path, dir):
+def find_hdf5_images(master_path):
     master = h5py.File(master_path, 'r')
     data_grp = master['/entry/data']
     for name in sorted(data_grp):
@@ -398,10 +399,10 @@ def find_hdf5_images(master_path, dir):
         link = data_grp.get(name, getlink=True)
         dset = data_grp[name]
         if isinstance(link, h5py.ExternalLink):
-            file_path = (master_path.parent / link.filename).relative_to(dir)
+            file_path = (master_path.parent / link.filename)
             obj_path = link.path
         else:
-            file_path = master_path.relative_to(dir)
+            file_path = master_path
             obj_path = dset.name
 
         yield file_path, obj_path, dset.shape[0]
@@ -409,6 +410,9 @@ def find_hdf5_images(master_path, dir):
 
 # ============ Output =============
 
+def write_doi(doi, outf):
+    if doi:
+        outf.write(f"_database.dataset_doi   {doi!r}\n")
 
 def write_beam_info(expts: ExperimentList, outf):
     wl = expts[0].beam.get_wavelength()
@@ -426,6 +430,8 @@ _diffrn_radiation.type             xray
 def cif_loop(base_name: str, fields: list, rows) -> str:
     """Assemble a loop_ table ready to be written to a CIF file"""
     for i, row in enumerate(rows, start=1):
+        if len(row) == 1 and row[0].startswith('#'):
+            continue  # Comment row
         if len(row) != len(fields):
             raise ValueError(
                 f"Row {i} has unexpected length ({len(row)} != {len(fields)}"
@@ -515,7 +521,7 @@ _diffrn_detector.diffrn_id DIFFRN
 
 
 def write_scan_info(expts: ExperimentList, g_axes, d_axes, outf):
-    """ Output scan axis information 
+    """ Output scan axis information
     """
     fields = [
         "scan_id", "axis_id", "displacement_start", "displacement_increment",
@@ -581,6 +587,8 @@ def write_frame_ids(expts: ExperimentList, outf, scan_frame_limit=np.inf):
         for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
             rows.append((f"frm{counter}", f"SCAN.{s_ix}", f_ix + 1, exp_time[f_ix]))
             counter += 1
+        if (n_cut := expt.scan.get_num_images() - scan_frame_limit) > 0:
+            rows.append((f"# - {n_cut} rows cut for preview -",))
 
     outf.write(cif_loop(
         "_diffrn_scan_frame",
@@ -599,6 +607,8 @@ def write_frame_images(expts: ExperimentList, outf, scan_frame_limit=np.inf):
         for f_ix in range(min(expt.scan.get_num_images(), scan_frame_limit)):
             rows.append((f"frm{counter}", "ELEMENT", "IMAGE", counter))
             counter += 1
+        if (n_cut := expt.scan.get_num_images() - scan_frame_limit) > 0:
+            rows.append((f"# - {n_cut} rows cut for preview -",))
 
     outf.write(cif_loop(
         "_diffrn_data_frame",
@@ -608,11 +618,15 @@ def write_frame_images(expts: ExperimentList, outf, scan_frame_limit=np.inf):
 
     # Now link images with external locations
 
+    rows = [("IMAGE", i, i) for i in range(1, counter)]
+    if (n_cut := sum(e.scan.get_num_images() for e in expts) - (counter - 1)) > 0:
+        rows.append((f"# - {n_cut} rows cut for preview -",))
     outf.write(cif_loop(
         "_array_data",
         ["array_id", "binary_id", "external_data_id"],
-        [("IMAGE", i, i) for i in range(1, counter)]
+        rows
     ))
+
 
 
 def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
@@ -647,6 +661,8 @@ def write_external_locations(ext_info, outf, scan_frame_limit=np.inf):
                 r += [fr_ix]
             rows.append(r)
             counter += 1
+        if (n_cut := extf['num_frames'] - scan_frame_limit) > 0:
+            rows.append((f"# - {n_cut} rows cut for preview -",))
 
     outf.write(cif_loop("_array_data_external_data", fields, rows))
 
@@ -662,6 +678,30 @@ def encode_scan_step(template, val):
         return f"{val:0{width}}."
     return re.sub(r"(#+)\.", repl, template)
 
+
+def make_cif(expts, outf, data_name, locations, doi=None,
+             file_type=None, overload_value=None, frame_limit=np.inf):
+    outf.write(CIF_HEADER.format(name=data_name))
+
+    write_doi(doi, outf)
+
+    write_beam_info(expts, outf)
+
+    g_ax, d_ax, s_ax = get_axes_info(expts)
+    write_axis_info(g_ax, d_ax, s_ax, outf)
+
+    write_array_info('DETECTOR',
+                     len(list(expts[0].detector.iter_panels())),
+                     s_ax, d_ax, outf, overload_value)
+
+    write_scan_info(expts, g_ax, d_ax, outf)
+    write_frame_ids(expts, outf, frame_limit)
+    write_frame_images(expts, outf, frame_limit)
+
+    ext_info = gen_external_locations(
+        expts, locations, file_type
+    )
+    write_external_locations(ext_info, outf, frame_limit)
 
 # ============= main ==============
 
@@ -736,34 +776,32 @@ def main(argv=None):
 
     frame_limit = np.inf if (args.frames_limit is None) else args.frames_limit
 
+    if args.url:
+        if args.url_base:
+            raise ValueError("Pass --url or --url-base, not both")
+        locations = [ArchiveUrl(u, args.dir, args.archive_type or guess_archive_type(u))
+                     for u in args.url]
+    elif args.url_base:
+        locations = [DirectoryUrl(u) for u in args.url_base]
+        print(locations)
+    else:
+        raise ValueError("--url or --url-base is required")
+
+    if args.input_fn[0].suffix == '.expt':
+        assert len(args.input_fn) == 1, "Please pass only 1 .expt file"
+        expts = ExperimentListFactory.from_json_file(
+            args.input_fn[0], check_format=(not args.no_check_format)
+        )
+    else:
+        print(f"Attempting to parse {len(args.input_fn)} paths using dxtbx")
+        expts = ExperimentListFactory.from_filenames(args.input_fn)
+        print(f"Read {len(expts)} experiments")
+
+
+
     with out_fn.open('w') as outf:
-        outf.write(CIF_HEADER.format(name=out_fn.stem))
-
-        if args.input_fn[0].suffix == '.expt':
-            assert len(args.input_fn) == 1, "Please pass only 1 .expt file"
-            expts = ExperimentListFactory.from_json_file(
-                args.input_fn[0], check_format=(not args.no_check_format)
-            )
-        else:
-            print(f"Attempting to parse {len(args.input_fn)} paths using dxtbx")
-            expts = ExperimentListFactory.from_filenames(args.input_fn)
-            print(f"Read {len(expts)} experiments")
-
-        write_beam_info(expts, outf)
-
-        g_ax, d_ax, s_ax = get_axes_info(expts)
-        write_axis_info(g_ax, d_ax, s_ax, outf)
-
-        write_array_info('DETECTOR',
-                         len(list(expts[0].detector.iter_panels())),
-                         s_ax, d_ax, outf, args.overload_value)
-
-        write_scan_info(expts, g_ax, d_ax, outf)
-        write_frame_ids(expts, outf, frame_limit)
-        write_frame_images(expts, outf, frame_limit)
-
-        ext_info = gen_external_locations(expts, args)
-        write_external_locations(ext_info, outf, frame_limit)
+        make_cif(expts, outf, out_fn.stem, locations,
+                 overload_value=args.overload_value, frame_limit=frame_limit)
 
 
 if __name__ == '__main__':
