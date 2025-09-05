@@ -304,9 +304,11 @@ class ArchiveUrl:
 @dataclass
 class DirectoryUrl:
     url_base: str
+    dir: Path
 
     def cif_fields(self, template_path: Path):
-        return {'uri_template': self.url_base.rstrip('/') + '/' + template_path.name}
+        return {'uri_template': self.url_base.rstrip('/') + '/' +
+                                template_path.relative_to(self.dir).as_posix()}
 
 class PlaceholderUrl:
     def cif_fields(self, template_path: Path):
@@ -782,7 +784,7 @@ def main(argv=None):
         locations = [ArchiveUrl(u, args.dir, args.archive_type or guess_archive_type(u))
                      for u in args.url]
     elif args.url_base:
-        locations = [DirectoryUrl(u) for u in args.url_base]
+        locations = [DirectoryUrl(u, args.dir) for u in args.url_base]
         print(locations)
     else:
         raise ValueError("--url or --url-base is required")
