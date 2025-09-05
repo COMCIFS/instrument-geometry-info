@@ -1,4 +1,5 @@
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -76,6 +77,29 @@ def find_common_ancestor(p1: Path, p2: Path):
             return candidate
     raise ValueError(f"No ancestor in common: {p1} & {p2}")
 
+def extrapolate_sequence(s0, s1, length):
+    matched0 = re.split(r"(\d+)", s0)
+    matched1 = re.split(r"(\d+)", s1)
+    if len(matched0) != len(matched1):
+        return
+
+    if len(diffs := [
+        i for i, (p0, p1) in enumerate(zip(matched0, matched1)) if p0 != p1
+    ]) != 1:
+        return  # No difference, or >1 piece differs
+    if (diff_ix := diffs[0]) % 2 == 0:
+        return  # The difference is in a non-numeric part
+
+    width = len(matched0[diff_ix])
+    n0 = int(matched0[diff_ix])  # First number in sequence
+    if int(matched1[diff_ix]) != n0 + 1:
+        return  # Not increasing by 1
+
+    for i in range(2, length):
+        pieces = matched0.copy()
+        pieces[diff_ix] = f"{n0 + i:0{width}}"
+        yield ''.join(pieces)
+
 
 def get_download_urls(expts: ExperimentList):
     print("Is the data downloaded as:")
@@ -95,7 +119,61 @@ def get_download_urls(expts: ExperimentList):
         print("Archive is unpacked at:", base_dir)
         return [ArchiveUrl(url, base_dir, archive_type)]
     elif choice == "2":  # Archive per scan
-        ...
+        res = []
+
+        print(f"Scan 1, starting with file {first_path}")
+        first_url = input_url_validated("Archive URL: ")
+        archive_type = input_archive_type(first_url)
+        first_base_dir = choose_archive_unpacked_root(first_path)
+        res.append(ArchiveUrl(first_url, first_base_dir, archive_type))
+        print()
+        if len(expts) <= 1:
+            return res
+
+        second_path = Path(expts[1].imageset.get_path(0))
+        print(f"Scan 2, starting with file {second_path}")
+        second_url = input_url_validated("Archive URL:")
+        second_base_dir = choose_archive_unpacked_root(second_path)
+        res.append(ArchiveUrl(second_url, second_base_dir, archive_type))
+        print()
+        if len(expts) <= 2:
+            return res
+
+        more_urls = list(extrapolate_sequence(first_url, second_url, len(expts)))
+        if not more_urls:
+            print("Could not find sequence from URLs")
+        if second_base_dir == first_base_dir:
+            more_base_dirs = [first_base_dir] * (len(expts) - 2)
+        else:
+            more_base_dirs = [Path(p) for p in extrapolate_sequence(
+                str(first_base_dir), str(second_base_dir), len(expts)
+            )]
+            if not more_base_dirs:
+                print("Could not find sequence from unpacked archive roots")
+
+        for i in range(2, len(expts)):
+            if more_urls:
+                url = more_urls[i - 2]
+                print(f"Scan {i} URL:", url)
+                if i == len(expts) - 1:
+                    if not check_url(url):
+                        sys.exit(1)
+            else:
+                url = input_url_validated(f"Scan {i} URL: ")
+
+            if more_base_dirs:
+                base_dir = more_base_dirs[i - 2]
+                print("  Unpacked as:", base_dir)
+                if not base_dir.is_dir():
+                    sys.exit("Not a directory")
+            else:
+                eg_path = expts[i].imageset.get_path(0)
+                base_dir = choose_archive_unpacked_root(eg_path)
+
+            res.append(ArchiveUrl(url, base_dir, archive_type))
+
+        return res
+
     else:  # Separate files
         if h5py.is_hdf5(first_path):
             first_path, *_ = next(find_hdf5_images(first_path))
@@ -121,8 +199,6 @@ def get_download_urls(expts: ExperimentList):
         print("Base URL:", base_url)
         print("Directory:", base_dir)
         return DirectoryUrl(base_url, base_dir)
-
-
 
 
 def main():
