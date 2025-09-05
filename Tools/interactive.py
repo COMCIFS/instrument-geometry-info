@@ -1,7 +1,9 @@
 import argparse
+import io
 import re
 import sys
 from pathlib import Path
+from subprocess import run
 
 import h5py
 import requests
@@ -54,23 +56,26 @@ def check_url(url, msg="Checking URL..."):
             return True
     return False
 
+
 def input_url_validated(prompt):
     while True:
         url = input(prompt)
         if check_url(url):
             return url
 
+
 def guess_archive_type(url: str):
-    if url.endswith(('.tgz', '.tar.gz')):
-        return 'TGZ'
-    elif url.endswith(('.tbz', '.tar.bz2')):
-        return 'TBZ'
-    elif url.endswith(('.txz', '.tar.xz')):
-        return 'TXZ'
-    elif url.endswith('.zip'):
-        return 'ZIP'
+    if url.endswith((".tgz", ".tar.gz")):
+        return "TGZ"
+    elif url.endswith((".tbz", ".tar.bz2")):
+        return "TBZ"
+    elif url.endswith((".txz", ".tar.xz")):
+        return "TXZ"
+    elif url.endswith(".zip"):
+        return "ZIP"
 
     return None
+
 
 def input_archive_type(url: str):
     guess = guess_archive_type(url)
@@ -79,6 +84,7 @@ def input_archive_type(url: str):
         res = input(f"Archive type (TGZ, TBZ, TXZ, ZIP){dflt}: ").upper() or guess
         if res in ("TGZ", "TBZ", "TXZ", "ZIP"):
             return res
+
 
 def choose_archive_unpacked_root(file_path: Path) -> Path:
     print("The archive is unpacked as:")
@@ -107,15 +113,21 @@ def find_common_ancestor(p1: Path, p2: Path):
             return candidate
     raise ValueError(f"No ancestor in common: {p1} & {p2}")
 
+
 def extrapolate_sequence(s0, s1, length):
     matched0 = re.split(r"(\d+)", s0)
     matched1 = re.split(r"(\d+)", s1)
     if len(matched0) != len(matched1):
         return
 
-    if len(diffs := [
-        i for i, (p0, p1) in enumerate(zip(matched0, matched1)) if p0 != p1
-    ]) != 1:
+    if (
+        len(
+            diffs := [
+                i for i, (p0, p1) in enumerate(zip(matched0, matched1)) if p0 != p1
+            ]
+        )
+        != 1
+    ):
         return  # No difference, or >1 piece differs
     if (diff_ix := diffs[0]) % 2 == 0:
         return  # The difference is in a non-numeric part
@@ -128,7 +140,7 @@ def extrapolate_sequence(s0, s1, length):
     for i in range(2, length):
         pieces = matched0.copy()
         pieces[diff_ix] = f"{n0 + i:0{width}}"
-        yield ''.join(pieces)
+        yield "".join(pieces)
 
 
 def get_download_urls(expts: ExperimentList):
@@ -175,9 +187,12 @@ def get_download_urls(expts: ExperimentList):
         if second_base_dir == first_base_dir:
             more_base_dirs = [first_base_dir] * (len(expts) - 2)
         else:
-            more_base_dirs = [Path(p) for p in extrapolate_sequence(
-                str(first_base_dir), str(second_base_dir), len(expts)
-            )]
+            more_base_dirs = [
+                Path(p)
+                for p in extrapolate_sequence(
+                    str(first_base_dir), str(second_base_dir), len(expts)
+                )
+            ]
             if not more_base_dirs:
                 print("Could not find sequence from unpacked archive roots")
 
@@ -261,28 +276,69 @@ def get_doi(download_info):
             return doi
 
 
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+", type=Path)
     args = ap.parse_args()
 
-    if args.files[0].suffix == '.expt':
+    if args.files[0].suffix == ".expt":
         assert len(args.files) == 1, "Please pass only 1 .expt file"
         expts = ExperimentListFactory.from_json_file(
-            args.files[0], check_format=True #(not args.no_check_format)
+            args.files[0], check_format=True  # (not args.no_check_format)
         )
     else:
         print(f"Attempting to parse {len(args.files)} paths using dxtbx")
         expts = ExperimentListFactory.from_filenames(args.files)
 
-    print(f"Found {len(expts)} experiment(s) with "
-          f"{sum(len(e.imageset) for e in expts)} total images.\n")
+    print(
+        f"Found {len(expts)} experiment(s) with "
+        f"{sum(len(e.imageset) for e in expts)} total images.\n"
+    )
 
     download_info = get_download_urls(expts)
     print()
 
     doi = get_doi(download_info)
+
+    sio = io.StringIO()
+    sio.write("# ImgCIF preview - press Q to go back\n\n")
+    make_cif(
+        expts,
+        sio,
+        data_name="preview",
+        locations=download_info,
+        doi=doi,
+        file_type=None,
+        overload_value=None,
+        frame_limit=5,
+    )
+
+    run(["less"], input=sio.getvalue().encode("utf-8"))
+
+    out_filename = Path(input("Output filename [generated.cif]: ") or "generated.cif")
+
+    if out_filename.is_file():
+        rep = ""
+        while rep not in ("y", "n"):
+            rep = input("Overwrite ([y]/n): ").lower() or "y"
+        if rep == "n":
+            print("No output written")
+    elif out_filename.exists():
+        sys.exit(f"{out_filename} exists but is not a file")
+
+    with out_filename.open("w", encoding="utf-8") as f:
+        make_cif(
+            expts,
+            f,
+            data_name=out_filename.stem,
+            locations=download_info,
+            doi=doi,
+            file_type=None,
+            overload_value=None,
+            frame_limit=5,
+        )
+    print(f"Written {out_filename}")
+
 
 if __name__ == "__main__":
     sys.exit(main())
