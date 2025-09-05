@@ -338,8 +338,8 @@ def gen_external_locations(
     for expt, download_loc in zip(expts, locations):
         template_path = Path(expt.imageset.get_template())  # complete local path as in expt
         fmt = file_type or guess_file_type(
-            template_path.name, expt.imageset.get_format_class()
-        )
+            template_path.name, expt.imageset.get_format_class(), warn_fail=True
+        ) or "???"
 
         n_frames = expt.scan.get_num_images()
 
@@ -363,7 +363,7 @@ def gen_external_locations(
     return ext_info
 
 
-def guess_archive_type(url: str):
+def guess_archive_type(url: str, warn_fail=False):
     if url.endswith(('.tgz', '.tar.gz')):
         return 'TGZ'
     elif url.endswith(('.tbz', '.tar.bz2')):
@@ -373,11 +373,12 @@ def guess_archive_type(url: str):
     elif url.endswith('.zip'):
         return 'ZIP'
 
-    print(f"WARNING: could not guess archive type from URL ({url})")
-    return '???'
+    if warn_fail:
+        print(f"WARNING: could not guess archive type from URL ({url})")
+    return None
 
 
-def guess_file_type(name: str, dxtbx_fmt_cls):
+def guess_file_type(name: str, dxtbx_fmt_cls, warn_fail=False):
     if issubclass(dxtbx_fmt_cls, FormatSMV):
         return 'SMV'
     elif name.endswith('.cbf'):
@@ -386,9 +387,10 @@ def guess_file_type(name: str, dxtbx_fmt_cls):
         return 'HDF5'
     elif name.endswith('.tif'):
         return 'TIFF'
-    else:
+
+    if warn_fail:
         print(f"WARNING: Unable to determine type of image file ({name})")
-        return '???'
+    return None
 
 
 def find_hdf5_images(master_path):
@@ -781,8 +783,10 @@ def main(argv=None):
     if args.url:
         if args.url_base:
             raise ValueError("Pass --url or --url-base, not both")
-        locations = [ArchiveUrl(u, args.dir, args.archive_type or guess_archive_type(u))
-                     for u in args.url]
+        locations = [ArchiveUrl(
+            u, args.dir, (
+                args.archive_type or guess_archive_type(u, warn_fail=True) or "???"
+            )) for u in args.url]
     elif args.url_base:
         locations = [DirectoryUrl(u, args.dir) for u in args.url_base]
         print(locations)

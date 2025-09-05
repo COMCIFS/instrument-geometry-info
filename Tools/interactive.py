@@ -10,7 +10,14 @@ import requests
 from dxtbx.model import ExperimentList
 from dxtbx.model.experiment_list import ExperimentListFactory
 
-from dials2imgcif import make_cif, ArchiveUrl, DirectoryUrl, find_hdf5_images
+from dials2imgcif import (
+    ArchiveUrl,
+    DirectoryUrl,
+    find_hdf5_images,
+    guess_archive_type,
+    guess_file_type,
+    make_cif,
+)
 
 
 DOI_RULES = [
@@ -64,25 +71,21 @@ def input_url_validated(prompt):
             return url
 
 
-def guess_archive_type(url: str):
-    if url.endswith((".tgz", ".tar.gz")):
-        return "TGZ"
-    elif url.endswith((".tbz", ".tar.bz2")):
-        return "TBZ"
-    elif url.endswith((".txz", ".tar.xz")):
-        return "TXZ"
-    elif url.endswith(".zip"):
-        return "ZIP"
-
-    return None
-
-
 def input_archive_type(url: str):
     guess = guess_archive_type(url)
     dflt = f" [{guess}]" if guess else ""
     while True:
         res = input(f"Archive type (TGZ, TBZ, TXZ, ZIP){dflt}: ").upper() or guess
         if res in ("TGZ", "TBZ", "TXZ", "ZIP"):
+            return res
+
+
+def input_file_type(name: str, dxtbx_fmt_cls):
+    guess = guess_file_type(name, dxtbx_fmt_cls)
+    dflt = f" [{guess}]" if guess else ""
+    while True:
+        res = input(f"Archive type (HDF5, CBF, TIFF, SMV){dflt}: ").upper() or guess
+        if res in ("HDF5", "CBF", "TIFF", "SMV"):
             return res
 
 
@@ -299,6 +302,11 @@ def main():
     print()
 
     doi = get_doi(download_info)
+    print()
+
+    imgset0 = expts[0].imageset
+    file_type = input_file_type(imgset0.get_path(0), imgset0.get_format_class())
+    print()
 
     sio = io.StringIO()
     sio.write("# ImgCIF preview - press Q to go back\n\n")
@@ -308,7 +316,7 @@ def main():
         data_name="preview",
         locations=download_info,
         doi=doi,
-        file_type=None,
+        file_type=file_type,
         overload_value=None,
         frame_limit=5,
     )
@@ -333,7 +341,7 @@ def main():
             data_name=out_filename.stem,
             locations=download_info,
             doi=doi,
-            file_type=None,
+            file_type=file_type,
             overload_value=None,
             frame_limit=5,
         )
