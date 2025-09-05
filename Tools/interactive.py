@@ -10,8 +10,38 @@ from dxtbx.model.experiment_list import ExperimentListFactory
 
 from dials2imgcif import make_cif, ArchiveUrl, DirectoryUrl, find_hdf5_images
 
-def check_url(url):
-    print("Checking URL...", end=" ", flush=True)
+
+DOI_RULES = [
+    # Download URL regex -> DOI template
+    (r"https://zenodo\.org/records/(\d+)", "10.5281/zenodo.{}"),
+    (r"\w+://[\w\-.]+/10\.15785/SBGRID/(\d+)", "10.15785/SBGRID/{}"),  # Various sbgrid domains
+    (r"https://xrda\.pdbj\.org/rest/public/entries/download/(\d+)", "10.51093/xrd-{:05}"),
+]
+
+
+def guess_doi(download_info):
+    urls = []
+    for loc in download_info:
+        if isinstance(loc, ArchiveUrl):
+            urls.append(loc.url)
+        elif isinstance(loc, DirectoryUrl):
+            urls.append(loc.url_base)
+
+    if not urls:
+        return ""
+
+    for url_pat, doi_template in DOI_RULES:
+        matches = [re.match(url_pat, u) for u in urls]
+        if all(matches):
+            id_part = matches[0][1]
+            if all(m[1] == id_part for m in matches[1:]):
+                return doi_template.format(id_part)
+
+    return ""
+
+
+def check_url(url, msg="Checking URL..."):
+    print(msg, end=" ", flush=True)
     try:
         resp = requests.get(url, stream=True)
     except requests.RequestException as e:
@@ -132,7 +162,7 @@ def get_download_urls(expts: ExperimentList):
 
         second_path = Path(expts[1].imageset.get_path(0))
         print(f"Scan 2, starting with file {second_path}")
-        second_url = input_url_validated("Archive URL:")
+        second_url = input_url_validated("Archive URL: ")
         second_base_dir = choose_archive_unpacked_root(second_path)
         res.append(ArchiveUrl(second_url, second_base_dir, archive_type))
         print()
@@ -154,12 +184,12 @@ def get_download_urls(expts: ExperimentList):
         for i in range(2, len(expts)):
             if more_urls:
                 url = more_urls[i - 2]
-                print(f"Scan {i} URL:", url)
+                print(f"Scan {i + 1} URL:", url)
                 if i == len(expts) - 1:
                     if not check_url(url):
                         sys.exit(1)
             else:
-                url = input_url_validated(f"Scan {i} URL: ")
+                url = input_url_validated(f"Scan {i + 1} URL: ")
 
             if more_base_dirs:
                 base_dir = more_base_dirs[i - 2]
@@ -201,6 +231,37 @@ def get_download_urls(expts: ExperimentList):
         return DirectoryUrl(base_url, base_dir)
 
 
+def get_doi(download_info):
+    guessed = guess_doi(download_info)
+    if guessed:
+        print("Data DOI (guessed from download URLs):", guessed)
+        if not check_url(f"https://doi.org/{guessed}", "Checking DOI resolves..."):
+            guessed = ""
+
+    if guessed:
+        print("1. Use guessed DOI", guessed)
+        print("2. Enter another DOI for the data")
+        print("3. No DOI")
+        choice = ""
+        while choice not in ("1", "2", "3"):
+            choice = input("Option 1-3: ")
+
+        if choice == "1":
+            return guessed
+        elif choice == "3":
+            return None
+
+    while True:
+        doi = input("DOI (optional): ")
+        if not doi:
+            print("No DOI will be included")
+            return None
+
+        if check_url(f"https://doi.org/{doi}", "Checking DOI resolves..."):
+            return doi
+
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+", type=Path)
@@ -218,7 +279,10 @@ def main():
     print(f"Found {len(expts)} experiment(s) with "
           f"{sum(len(e.imageset) for e in expts)} total images.\n")
 
-    get_download_urls(expts)
+    download_info = get_download_urls(expts)
+    print()
+
+    doi = get_doi(download_info)
 
 if __name__ == "__main__":
     sys.exit(main())
