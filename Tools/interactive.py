@@ -117,21 +117,22 @@ def input_url_validated(p):
 
 
 def input_archive_type(url: str):
-    guess = guess_archive_type(url) or ""
-    return prompt(
-        "Archive type (TGZ, TBZ, TXZ, ZIP): ",
-        default=guess,
-        validator=Validator.from_callable(lambda s: s.upper() in ARCHIVE_TYPES)
-    ).upper()
+    return choice("Archive type:", options=[
+        ("TGZ", "TGZ - .tar.gz"),
+        ("TBZ", "TBZ - .tar.bz2"),
+        ("TXZ", "TXZ - .tar.xz"),
+        ("ZIP", "ZIP - .zip"),
+    ], default=guess_archive_type(url))
 
 
 def input_file_type(name: str, dxtbx_fmt_cls):
-    guess = guess_file_type(name, dxtbx_fmt_cls) or ""
-    return prompt(
-        "File type (HDF5, CBF, TIFF, SMV): ",
-        default=guess,
-        validator=Validator.from_callable(lambda s: s.upper() in FILE_TYPES)
-    ).upper()
+    guess = guess_file_type(name, dxtbx_fmt_cls)
+    return choice("File type:", options=[
+        ("HDF5", "HDF5 (including NeXus files)"),
+        ("CBF", "CBF"),
+        ("TIFF", "TIFF"),
+        ("SMV", "SMV"),
+    ], default=guess_file_type(name, dxtbx_fmt_cls))
 
 def choose_archive_unpacked_root(file_path: Path) -> Path:
     chosen = choice("Paths inside archive:", options=[
