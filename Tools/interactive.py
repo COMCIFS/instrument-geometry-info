@@ -9,7 +9,7 @@ import h5py
 import requests
 from dxtbx.model import ExperimentList
 from dxtbx.model.experiment_list import ExperimentListFactory
-from prompt_toolkit import prompt
+from prompt_toolkit import choice, prompt
 from prompt_toolkit.validation import Validator, ValidationError
 
 from dials2imgcif import (
@@ -24,21 +24,6 @@ from dials2imgcif import (
 # Recognised formats for ImgCIF
 ARCHIVE_TYPES = ("TGZ", "TBZ", "TXZ", "ZIP")
 FILE_TYPES = ("HDF5", "CBF", "TIFF", "SMV")
-
-
-class NumberedChoiceValidator(Validator):
-    def __init__(self, up_to: int):
-        self.up_to = up_to
-
-    def validate(self, document):
-        t = document.text
-        try:
-            i = int(t)
-        except ValueError:
-            raise ValidationError(message="Enter a number")
-
-        if not 0 < i <= self.up_to:
-            raise ValidationError(message=f"Enter a number 1-{self.up_to}")
 
 
 class URLValidator(Validator):
@@ -149,19 +134,11 @@ def input_file_type(name: str, dxtbx_fmt_cls):
     ).upper()
 
 def choose_archive_unpacked_root(file_path: Path) -> Path:
-    print("The archive is unpacked as:")
-    n_levels = len(file_path.parents)
-    for i, p in enumerate(file_path.parents[:3], start=1):
-        print(f" {i}. {p}")
-        print(f"   Path in archive: {file_path.relative_to(p)}")
-    if n_levels > 3:
-        if n_levels > 4:
-            print(f" ... up to {n_levels} ({file_path.parents[-1]})")
-
-    choice = int(prompt(
-        f"Option 1-{n_levels}: ", validator=NumberedChoiceValidator(n_levels)
-    ))
-    return file_path.parents[choice - 1]
+    chosen = choice("Paths inside archive:", options=[
+        (i, f"{file_path.relative_to(p)}\n      Unpacked root: {p}")
+        for i, p in enumerate(file_path.parents[:-1])
+    ])
+    return file_path.parents[chosen]
 
 
 def find_common_ancestor(p1: Path, p2: Path):
@@ -201,21 +178,20 @@ def extrapolate_sequence(s0, s1, length):
 
 
 def get_download_urls(expts: ExperimentList):
-    print("Is the data downloaded as:")
-    print(" 1. A single archive (e.g. .zip or .tar.gz)")
-    print(" 2. One archive per scan")
-    print(" 3. Separate files, not in an archive")
-
-    choice = prompt("Option 1-3: ", validator=NumberedChoiceValidator(3))
+    opt = choice("Is the data downloaded as:", options=[
+        ("single", "A single archive (e.g. .zip or .tar.gz)"),
+        ("scans",  "One archive per scan"),
+        ("separate", "Separate files, not in an archive"),
+    ])
 
     first_path = Path(expts[0].imageset.get_path(0))
-    if choice == "1":  # Single archive
+    if opt == "single":  # Single archive
         url = input_url_validated("Archive URL: ")
         archive_type = input_archive_type(url)
         base_dir = choose_archive_unpacked_root(first_path)
         print("Archive is unpacked at:", base_dir)
         return [ArchiveUrl(url, base_dir, archive_type)]
-    elif choice == "2":  # Archive per scan
+    elif opt == "scans":  # Archive per scan
         res = []
 
         print(f"Scan 1, starting with file {first_path}")
