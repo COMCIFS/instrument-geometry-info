@@ -9,6 +9,8 @@ import h5py
 import requests
 from dxtbx.model import ExperimentList
 from dxtbx.model.experiment_list import ExperimentListFactory
+from prompt_toolkit import prompt
+from prompt_toolkit.validation import Validator, ValidationError
 
 from dials2imgcif import (
     ArchiveUrl,
@@ -18,6 +20,67 @@ from dials2imgcif import (
     guess_file_type,
     make_cif,
 )
+
+# Recognised formats for ImgCIF
+ARCHIVE_TYPES = ("TGZ", "TBZ", "TXZ", "ZIP")
+FILE_TYPES = ("HDF5", "CBF", "TIFF", "SMV")
+
+
+class NumberedChoiceValidator(Validator):
+    def __init__(self, up_to: int):
+        self.up_to = up_to
+
+    def validate(self, document):
+        t = document.text
+        try:
+            i = int(t)
+        except ValueError:
+            raise ValidationError(message="Enter a number")
+
+        if not 0 < i <= self.up_to:
+            raise ValidationError(message=f"Enter a number 1-{self.up_to}")
+
+
+class URLValidator(Validator):
+    def validate(self, document):
+        url = document.text
+        cp = document.cursor_position
+
+        try:
+            resp = requests.get(url, stream=True)
+        except requests.RequestException as e:
+            raise ValidationError(message=f"Bad URL ({e})", cursor_position=cp)
+        else:
+            if resp.status_code >= 400:
+                raise ValidationError(
+                    message=f"Bad URL ({resp.status_code}: {resp.reason})",
+                    cursor_position=cp,
+                )
+
+
+class DOIValidator(Validator):
+    def __init__(self, known_ok=()):
+        self.known_ok = known_ok
+
+    def validate(self, document):
+        doi = document.text
+        if not doi:
+            return
+
+        if doi in self.known_ok:
+            return
+
+        cp = document.cursor_position
+        try:
+            resp = requests.get(f"https://doi.org/{doi}", stream=True)
+        except requests.RequestException as e:
+            raise ValidationError(message=f"Bad DOI ({e})", cursor_position=cp)
+        else:
+            if resp.status_code >= 400:
+                raise ValidationError(
+                    message=f"Bad DOI ({resp.status_code}: {resp.reason})",
+                    cursor_position=cp,
+                )
 
 
 DOI_RULES = [
@@ -64,30 +127,26 @@ def check_url(url, msg="Checking URL..."):
     return False
 
 
-def input_url_validated(prompt):
-    while True:
-        url = input(prompt)
-        if check_url(url):
-            return url
+def input_url_validated(p):
+    return prompt(p, validator=URLValidator(), validate_while_typing=False)
 
 
 def input_archive_type(url: str):
-    guess = guess_archive_type(url)
-    dflt = f" [{guess}]" if guess else ""
-    while True:
-        res = input(f"Archive type (TGZ, TBZ, TXZ, ZIP){dflt}: ").upper() or guess
-        if res in ("TGZ", "TBZ", "TXZ", "ZIP"):
-            return res
+    guess = guess_archive_type(url) or ""
+    return prompt(
+        "Archive type (TGZ, TBZ, TXZ, ZIP): ",
+        default=guess,
+        validator=Validator.from_callable(lambda s: s.upper() in ARCHIVE_TYPES)
+    ).upper()
 
 
 def input_file_type(name: str, dxtbx_fmt_cls):
-    guess = guess_file_type(name, dxtbx_fmt_cls)
-    dflt = f" [{guess}]" if guess else ""
-    while True:
-        res = input(f"Archive type (HDF5, CBF, TIFF, SMV){dflt}: ").upper() or guess
-        if res in ("HDF5", "CBF", "TIFF", "SMV"):
-            return res
-
+    guess = guess_file_type(name, dxtbx_fmt_cls) or ""
+    return prompt(
+        "File type (HDF5, CBF, TIFF, SMV): ",
+        default=guess,
+        validator=Validator.from_callable(lambda s: s.upper() in FILE_TYPES)
+    ).upper()
 
 def choose_archive_unpacked_root(file_path: Path) -> Path:
     print("The archive is unpacked as:")
@@ -99,15 +158,10 @@ def choose_archive_unpacked_root(file_path: Path) -> Path:
         if n_levels > 4:
             print(f" ... up to {n_levels} ({file_path.parents[-1]})")
 
-    while True:
-        choice = input(f"Option 1-{n_levels}: ")
-        try:
-            choice = int(choice)
-        except ValueError:
-            continue
-
-        if 1 <= choice <= n_levels:
-            return file_path.parents[choice - 1]
+    choice = int(prompt(
+        f"Option 1-{n_levels}: ", validator=NumberedChoiceValidator(n_levels)
+    ))
+    return file_path.parents[choice - 1]
 
 
 def find_common_ancestor(p1: Path, p2: Path):
@@ -152,9 +206,7 @@ def get_download_urls(expts: ExperimentList):
     print(" 2. One archive per scan")
     print(" 3. Separate files, not in an archive")
 
-    choice = ""
-    while choice not in ("1", "2", "3"):
-        choice = input("Option 1-3: ")
+    choice = prompt("Option 1-3: ", validator=NumberedChoiceValidator(3))
 
     first_path = Path(expts[0].imageset.get_path(0))
     if choice == "1":  # Single archive
@@ -256,28 +308,12 @@ def get_doi(download_info):
         if not check_url(f"https://doi.org/{guessed}", "Checking DOI resolves..."):
             guessed = ""
 
-    if guessed:
-        print("1. Use guessed DOI", guessed)
-        print("2. Enter another DOI for the data")
-        print("3. No DOI")
-        choice = ""
-        while choice not in ("1", "2", "3"):
-            choice = input("Option 1-3: ")
-
-        if choice == "1":
-            return guessed
-        elif choice == "3":
-            return None
-
-    while True:
-        doi = input("DOI (optional): ")
-        if not doi:
-            print("No DOI will be included")
-            return None
-
-        if check_url(f"https://doi.org/{doi}", "Checking DOI resolves..."):
-            return doi
-
+    return prompt(
+        "DOI (optional): ",
+        default=guessed,
+        validator=DOIValidator(known_ok=(guessed,) if guessed else ()),
+        validate_while_typing=False,
+    ) or None
 
 def main():
     ap = argparse.ArgumentParser()
@@ -323,12 +359,13 @@ def main():
 
     run(["less"], input=sio.getvalue().encode("utf-8"))
 
-    out_filename = Path(input("Output filename [generated.cif]: ") or "generated.cif")
+    out_filename = Path(prompt("Output filename: ", default="generated.cif"))
 
     if out_filename.is_file():
-        rep = ""
-        while rep not in ("y", "n"):
-            rep = input("Overwrite ([y]/n): ").lower() or "y"
+        rep = prompt(
+            "Overwrite (y/n): ", default="y",
+            validator=Validator.from_callable(lambda s: s.lower() in ("y", "n"))
+        ).lower()
         if rep == "n":
             print("No output written")
     elif out_filename.exists():
