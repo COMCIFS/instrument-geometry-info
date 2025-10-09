@@ -6,4 +6,6 @@ dependencies:
   - numpy
   - h5py
   - pycifrw
+  - prompt-toolkit
+  - requests
   - pytest
