@@ -275,7 +275,7 @@ def get_download_urls(expts: ExperimentList):
 
         print("Base URL:", base_url)
         print("Directory:", base_dir)
-        return DirectoryUrl(base_url, base_dir)
+        return [DirectoryUrl(base_url, base_dir)]
 
 
 def get_doi(download_info):
@@ -357,7 +357,6 @@ def main():
             doi=doi,
             file_type=file_type,
             overload_value=None,
-            frame_limit=5,
         )
     print(f"Written {out_filename}")
 
