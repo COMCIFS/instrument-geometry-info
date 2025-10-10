@@ -128,8 +128,8 @@ def test_multiframe_tiff(tmp_path):
     main([
         str(samples_dir / 'xrd-285.expt'),
         "--no-check-format",
-        #"--dir", "/gpfs/exfel/data/scratch/kluyvert/imgcif-conv/xrd-285/",
-        "--url-base", "https://xrda.pdbj.org/rest/public/entries/download/285/frames/",
+        "--dir", "/gpfs/exfel/data/scratch/kluyvert/imgcif-conv/xrd-285/",
+        "--url-base", "https://xrda.pdbj.org/rest/public/entries/download/285/",
         "-o", str(out_path)
     ])
     assert out_path.is_file()
