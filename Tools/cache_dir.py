@@ -1,10 +1,15 @@
+import errno
 import hashlib
+import json
 import os
 import os.path as osp
 import shutil
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
+from secrets import token_hex
+
+INFO_FILE = ".cache-info"
 
 class DownloadsCache:
     def __init__(self, folder: Path):
@@ -18,40 +23,52 @@ class DownloadsCache:
     def path_for(self, url):
         return self.folder / self._hash(url)
 
+    def prepare(self, url):
+        p = self.path_for(url)
+        p.mkdir(exist_ok=True)
+
+    def get_info(self, url):
+        return json.loads((self.path_for(url) / INFO_FILE).read_text())
+
+    def set_info(self, url, download_size=None):
+        d = {"url": url, "download_size": download_size}
+        (self.path_for(url) / INFO_FILE).write_text(json.dumps(d))
+
     def get(self, url):
         if (subdir := self.path_for(url)).is_dir():
-            (subdir / ".cache-for").touch()  # Update mtime
+            (subdir / INFO_FILE).touch()  # Update mtime
             return subdir
         return None  # Not in cache
 
     @contextmanager
     def tmpdir(self):
-        td = tempfile.mkdtemp(dir=self.folder, prefix="creating-")
+        td = tempfile.mkdtemp(dir=self.folder, prefix=".creating-")
         try:
             yield Path(td)
         except:
             shutil.rmtree(td)
             raise
 
-    @contextmanager
-    def new_entry(self, url):
-        hashed_url = hashlib.sha3_256(url.encode('utf-8')).hexdigest()
-        final_dir = self.folder / hashed_url
-        tmpdir = Path(tempfile.mkdtemp(dir=self.folder, prefix="creating-"))
-        try:
-            (tmpdir / ".cache-for").write_text(url)
-            yield tmpdir, final_dir
-        except:
-            shutil.rmtree(tmpdir)
-            raise
+    def delete(self, dir_path: os.PathLike):
+        # We don't want to use a directory while deleting it, so rename it
+        # first to take it out of use, and then clean it up.
+        for _ in range(100):
+            renamed = self.folder / f".deleting-{token_hex(16)}"
+            try:
+                os.rename(dir_path, renamed)
+                break
+            except OSError as e:
+                if e.errno != errno.ENOTEMPTY:
+                    raise
         else:
-            tmpdir.rename(final_dir)
+            raise RuntimeError("Unable to rename directory for deletion")
 
+        shutil.rmtree(renamed)
 
     @staticmethod
     def _entry_last_used(p: os.PathLike):
         try:
-            return (Path(p) / ".cache-for").stat().st_mtime
+            return (Path(p) / INFO_FILE).stat().st_mtime
         except FileNotFoundError:
             return 0  # Delete folders missing the marker first
 
@@ -65,7 +82,7 @@ class DownloadsCache:
     def _entries(self):
         with os.scandir(self.folder) as it:
             for de in it:
-                if de.is_dir() and not de.name.startswith("creating-"):
+                if de.is_dir() and not de.name.startswith("."):
                     yield de
 
     def release_space(self, max_bytes_keep: int):
@@ -80,4 +97,4 @@ class DownloadsCache:
             return
 
         for de in entries[i:]:  # Remove oldest entries
-            shutil.rmtree(de)
+            self.remove(de)
