@@ -1,4 +1,3 @@
-import hashlib
 import io
 import shutil
 import tempfile
@@ -7,20 +6,21 @@ from pathlib import Path
 from time import perf_counter
 
 import streamlit as st
-import numpy as np
 import requests
 from dxtbx.model.experiment_list import ExperimentListFactory
 
 from dials2imgcif import guess_archive_type, guess_file_type, make_cif, ArchiveUrl
+from cache_dir import DownloadsCache
 
 DATA_DIR = Path("/gpfs/exfel/data/scratch/kluyvert/imgcif-source-data")
 ARCHIVE_EXTS = {'ZIP': '.zip', 'TGZ': '.tar.gz', 'TBZ': '.tar.bz2', 'TXZ': '.tar.xz'}
 SIZE_LIMIT = 5 * (1024 ** 3)
-BYTES_UNITS = ['B', 'KiB', 'MiB', 'GiB', 'TiB']
+
+download_cache = DownloadsCache(DATA_DIR)
 
 def fmt_bytes(n: Real) -> str:
     n = float(n)
-    for suffix in BYTES_UNITS:
+    for suffix in ['B', 'KiB', 'MiB', 'GiB', 'TiB', 'PiB']:
         if n < 1024:
             break
         n /= 1024
@@ -29,9 +29,7 @@ def fmt_bytes(n: Real) -> str:
 
 
 def download_and_unpack(archive_url, ext):
-    hashed_url = hashlib.sha3_256(archive_url.encode('utf-8')).hexdigest()
-    dir_for_url = DATA_DIR / hashed_url
-    print(f"{dir_for_url=}")
+    dir_for_url = download_cache.path_for(archive_url)
     if dir_for_url.is_dir():
         contents = list(dir_for_url.iterdir())
         print("Found something", contents)
@@ -56,17 +54,12 @@ def download_and_unpack(archive_url, ext):
             download_progress.progress(bytes_read / size, msg)
         download_progress.empty()
 
-        unpacked = Path(tempfile.mkdtemp(dir=DATA_DIR))
-        # TODO: this should be tougher against archives doing weird things
-        try:
+        with download_cache.tmpdir() as unpacked:
             print("Unpacking to", unpacked)
             with st.spinner("Unpacking"):
                 shutil.unpack_archive(tf.name, unpacked)
             print("Renaming to", dir_for_url)
             unpacked.rename(dir_for_url)
-        except:
-            shutil.rmtree(unpacked)
-            raise
 
         return dir_for_url
 
@@ -87,8 +80,6 @@ if not url or not archive_type:
 
 unpacked_archive = download_and_unpack(url, ARCHIVE_EXTS[archive_type])
 st.text(unpacked_archive)
-
-unpacked_archive = Path("/gpfs/exfel/data/scratch/kluyvert/imgcif-conv/6RLR/cbf/")
 
 path_in_archive = st.text_input("Data path in archive")
 if not path_in_archive:
@@ -120,16 +111,9 @@ st.write(f"File format: {file_type}")
 
 download_info = [
     ArchiveUrl(
-        "https://data.proteindiffraction.org/other/6r17.tar.bz2", 
-        "/gpfs/exfel/data/scratch/dallanto/DATA/MCBF/DLS-I24/proteindiffraction.org-6r17-syce2tex12-cbf-partial/",
-        "TBZ"
-    )
-]
-download_info = [
-    ArchiveUrl(
-        "",
-        "/gpfs/exfel/data/scratch/kluyvert/imgcif-conv/6RLR/cbf/",
-        "TBZ"
+        url,
+        unpacked_archive,
+        archive_type,
     )
 ]
 
