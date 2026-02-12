@@ -26,6 +26,7 @@ class DownloadsCache:
     def prepare(self, url):
         p = self.path_for(url)
         p.mkdir(exist_ok=True)
+        return p
 
     def get_info(self, url):
         return json.loads((self.path_for(url) / INFO_FILE).read_text())

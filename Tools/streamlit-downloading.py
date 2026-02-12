@@ -140,6 +140,11 @@ def download_archives(urls, ext, expected_size):
 
 def base_url_and_rel_paths(urls):
     s0 = urlsplit(urls[0])
+    if len(urls) == 1:
+        dirname, basename = posixpath.split(s0.path)
+        common_url = urlunsplit((s0.scheme, s0.netloc, dirname, s0.query, ''))
+        return common_url, [basename]
+
     fixed = (s0.scheme, s0.netloc, s0.query)
     paths = [s0.path]
     for u in urls[1:]:
