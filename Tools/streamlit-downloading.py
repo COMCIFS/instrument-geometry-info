@@ -1,3 +1,9 @@
+"""Web interface, downloading files up to a size limit
+
+To run this:
+
+    streamlit run streamlit-downloading.py
+"""
 import io
 import posixpath
 import shutil
@@ -14,7 +20,7 @@ from dxtbx.model.experiment_list import ExperimentListFactory
 from imgCIF_app.core import (
     guess_archive_type, guess_file_type, make_cif, ArchiveUrl, DirectoryUrl
 )
-from imgCIF_app.helpers import extrapolate_sequence
+from imgCIF_app.helpers import extrapolate_sequence, guess_doi
 from imgCIF_app.cache_dir import DownloadsCache
 
 DATA_DIR = Path("/gpfs/exfel/data/scratch/kluyvert/imgcif-source-data")
@@ -240,7 +246,7 @@ expts = load_expt_list(tuple(paths))
 st.write(f"Found {len(expts)} experiment(s) with "
          f"{sum(len(e.imageset) for e in expts)} total images.\n")
 
-doi = st.text_input("DOI (optional)", None)
+doi = st.text_input("Dataset DOI (optional)", guess_doi(download_info))
 
 imgset0 = expts[0].imageset
 fmt_guess = guess_file_type(imgset0.get_path(0), imgset0.get_format_class())
