@@ -14,7 +14,7 @@ from dxtbx.model.experiment_list import ExperimentListFactory
 from imgCIF_app.core import (
     guess_archive_type, guess_file_type, make_cif, ArchiveUrl, DirectoryUrl
 )
-from imgCIF_app.tui import extrapolate_sequence
+from imgCIF_app.helpers import extrapolate_sequence
 from imgCIF_app.cache_dir import DownloadsCache
 
 DATA_DIR = Path("/gpfs/exfel/data/scratch/kluyvert/imgcif-source-data")
