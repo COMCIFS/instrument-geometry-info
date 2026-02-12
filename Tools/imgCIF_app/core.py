@@ -331,6 +331,23 @@ def gen_external_locations(
             f"Got {len(locations)} download locations; expected 1 or 1 per scan ({n_scans})"
         )
 
+    # The ExperimentList is not necessarily in the same order as our downloads
+    # (it appears to get sorted by file path). Match up experiments by path.
+    if len({l.dir for l in locations}) == len(locations):
+        # Each download has its own folder, use the order of locations
+        location_dirs = [l.dir for l in locations]
+        def find_ix(e):
+            p = Path(e.imageset.get_template())
+            for dirp in p.parents:
+                try:
+                    return location_dirs.index(dirp)
+                except ValueError:
+                    pass
+            raise ValueError(f"Could not find location for {p}")
+        expts = sorted(expts, key=find_ix)
+    else:
+        pass  # TODO: how to match up experiments to downloads in this case?
+
     ext_info = []
 
     for expt, download_loc in zip(expts, locations):

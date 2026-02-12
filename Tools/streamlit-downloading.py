@@ -5,9 +5,11 @@ To run this:
     streamlit run streamlit-downloading.py
 """
 import io
+import os
 import posixpath
 import shutil
 import tempfile
+from itertools import islice
 from numbers import Real
 from pathlib import Path
 from time import perf_counter
@@ -176,6 +178,14 @@ def total_download_size(urls):
     return total_size
 
 
+def file_rel_paths(top):
+    for root, dirs, files in os.walk(top):
+        rel_root = Path(root).relative_to(top)
+        for f in sorted(files):
+            if not f.startswith('.'):
+                yield str(rel_root / f)
+
+
 print("Running script")
 
 st.title("ImgCIF creator")
@@ -190,8 +200,12 @@ if n_downloads > 1:
     urls.append(url2)
     if n_downloads > 2:
         if url1 and url2:
-            urls.extend(extrapolate_sequence(url1, url2, n_downloads))
-            st.text(f"Extrapolated URLs up to {urls[-1]}")
+            extra = list(extrapolate_sequence(url1, url2, n_downloads))
+            if not extra:
+                st.warning("Unable to extrapolate URL sequence")
+                st.stop()
+            urls.extend(extra)
+            st.markdown(f"Extrapolated URLs up to {urls[-1]}")
         else:
             st.text("Additional URLs will be extrapolated as a sequence")
             st.stop()
@@ -204,7 +218,7 @@ if (total_size := total_download_size(urls)) > SIZE_LIMIT:
                f"ImgCIF metadata.")
     st.stop()
 
-archive_type_guess = guess_archive_type(url1)
+archive_type_guess = guess_archive_type(urlsplit(url1).path)
 
 is_archive = st.toggle("Unpack archives (zip / tar)",
                        value=(archive_type_guess is not None))
@@ -212,15 +226,19 @@ is_archive = st.toggle("Unpack archives (zip / tar)",
 download_info = []
 
 if is_archive:
-    archive_type = st.pills(
+    if (archive_type := st.pills(
         "Archive format", ["ZIP", "TGZ", "TBZ", "TXZ"], default=archive_type_guess
-    )
+    )) is None:
+        st.stop()
     archive_ext = ARCHIVE_EXTS[archive_type]
 
     unpacked_dirs = download_archives(urls, archive_ext, total_size)
     download_info = [
         ArchiveUrl(u, p, archive_type) for (u, p) in zip(urls, unpacked_dirs)
     ]
+
+    st.text(f"Sample files from {url1}:")
+    st.code('\n'.join(islice(file_rel_paths(unpacked_dirs[0]), 10)), language=None)
 
     path_in_archive = st.text_input(
         "Data path in archive",
@@ -230,7 +248,11 @@ if is_archive:
 
     paths = []
     for au in download_info:
-        paths.extend(au.dir.glob(path_in_archive))
+        found_paths = list(au.dir.glob(path_in_archive))
+        if not found_paths:
+            st.warning(f"No matching files found from {au.url}")
+            st.stop()
+        paths.extend(found_paths)
 else:
     common_url, download_dir, rel_paths = download_files(urls, total_size)
     download_info.append(
