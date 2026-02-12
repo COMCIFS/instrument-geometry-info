@@ -3,7 +3,7 @@ from pathlib import Path
 import numpy as np
 from CifFile import ReadCif
 
-from dials2imgcif import main
+from imgCIF_app.core import main
 
 samples_dir = Path(__file__).parent / 'samples'
 

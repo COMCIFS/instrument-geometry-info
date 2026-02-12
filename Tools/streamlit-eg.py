@@ -11,11 +11,11 @@ import streamlit as st
 import requests
 from dxtbx.model.experiment_list import ExperimentListFactory
 
-from dials2imgcif import (
+from imgCIF_app.core import (
     guess_archive_type, guess_file_type, make_cif, ArchiveUrl, DirectoryUrl
 )
-from interactive import extrapolate_sequence
-from cache_dir import DownloadsCache
+from imgCIF_app.tui import extrapolate_sequence
+from imgCIF_app.cache_dir import DownloadsCache
 
 DATA_DIR = Path("/gpfs/exfel/data/scratch/kluyvert/imgcif-source-data")
 ARCHIVE_EXTS = {'ZIP': '.zip', 'TGZ': '.tar.gz', 'TBZ': '.tar.bz2', 'TXZ': '.tar.xz'}

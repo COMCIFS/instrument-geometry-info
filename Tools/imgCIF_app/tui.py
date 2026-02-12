@@ -12,7 +12,7 @@ from dxtbx.model.experiment_list import ExperimentListFactory
 from prompt_toolkit import choice, prompt
 from prompt_toolkit.validation import Validator, ValidationError
 
-from dials2imgcif import (
+from .core import (
     ArchiveUrl,
     DirectoryUrl,
     find_hdf5_images,
