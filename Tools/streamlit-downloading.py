@@ -19,6 +19,7 @@ import streamlit as st
 import requests
 from dxtbx.model.experiment_list import ExperimentListFactory
 
+from imgCIF_app import rsync
 from imgCIF_app.core import (
     guess_archive_type, guess_file_type, make_cif, ArchiveUrl, DirectoryUrl
 )
@@ -172,9 +173,13 @@ def download_files(urls, expected_size):
 def total_download_size(urls):
     total_size = 0
     for url in urls:
-        r = requests.head(url)
-        r.raise_for_status()
-        total_size += int(r.headers.get('content-length', '0'))
+        if url.startswith("rsync://"):
+            fl = rsync.get_file_list(url)
+            total_size = rsync.total_size(fl)
+        else:
+            r = requests.head(url)
+            r.raise_for_status()
+            total_size += int(r.headers.get('content-length', '0'))
     return total_size
 
 
@@ -253,6 +258,19 @@ if is_archive:
             st.warning(f"No matching files found from {au.url}")
             st.stop()
         paths.extend(found_paths)
+elif url1.startswith("rsync://"):
+    file_list = rsync.get_file_list(url1)
+    nfiles = len(file_list)
+    download_progress = st.progress(0, f'Downloading {nfiles} files')
+    with download_cache.tmpdir() as td:
+        for ndone in rsync.download(url1, td):
+            msg = f'Downloaded {ndone} / {nfiles}'
+            download_progress.progress(ndone / nfiles, msg)
+        download_dir = download_cache.path_for(url1)
+        td.rename(download_dir)
+    download_progress.empty()
+    download_info.append(DirectoryUrl(url1, download_dir))
+
 else:
     common_url, download_dir, rel_paths = download_files(urls, total_size)
     download_info.append(
