@@ -3,7 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - dxtbx
-  - numpy
+  - numpy <2.4  # https://github.com/dials/nxmx/issues/74
   - h5py
   - pycifrw
   - prompt-toolkit
